@@ -1,0 +1,43 @@
+# Backend .gitignore - Sin incluir la app Flutter
+
+# Firebase Functions
+functions/node_modules/
+functions/lib/
+functions/.env
+functions/.env.local
+functions/.env.production
+
+# Logs
+*.log
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+pubsub-debug.log
+
+# Firebase cache
+.firebase/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporales
+backup-*/
+temp_*
+*.tmp
+
+# Node
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de documentación temporal
+TEST_CHANGES.md

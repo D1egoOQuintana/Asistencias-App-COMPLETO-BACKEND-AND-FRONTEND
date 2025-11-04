@@ -1,0 +1,25 @@
+{
+  "folders": [
+    {
+      "name": "🔧 Backend (Functions)",
+      "path": "."
+    },
+    {
+      "name": "📱 App (Flutter)",
+      "path": "asistencias_app"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.dart_tool": true,
+      "**/build": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/.dart_tool": true,
+      "**/build": true,
+      "**/functions/lib": true
+    }
+  }
+}

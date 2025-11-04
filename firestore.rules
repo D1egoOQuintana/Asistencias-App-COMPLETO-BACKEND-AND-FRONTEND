@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthed() { return request.auth != null; }
+    // Preferir custom claims cuando existan; fallback al documento en /users/{uid}
+    function hasRole(role) {
+      return (
+        isAuthed() && (
+          request.auth.token.role == role || (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role
+          )
+        )
+      );
+    }
+    function isAdmin() { return hasRole('admin'); }
+    function isDocente() { return hasRole('docente'); }
+    function isAdminEmail() {
+      // Lista de emails de administradores permitidos
+      return request.auth.token.email in ['admin@asistencias.com', 'luisangelfabian10@gmail.com'];
+    }
+    function isDocenteOrAdmin() {
+      return isDocente() || isAdmin() || isAdminEmail();
+    }
+
+    // Acceso a un salón para docentes: dueño del salón o asignado explícitamente
+    function hasClassroomAccess(classroomId) {
+      return isAuthed() && isDocente() && (
+        (
+          exists(/databases/$(database)/documents/classrooms/$(classroomId)) &&
+          get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherUid == request.auth.uid
+        ) || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          classroomId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassrooms
+        )
+      );
+    }
+
+    match /users/{uid} {
+      allow read: if isAuthed() && (request.auth.uid == uid || isAdmin() || isAdminEmail());
+      allow create: if isAuthed() && (isAdmin() || isAdminEmail() || request.auth.uid == uid);  
+      allow update: if isAuthed() && (request.auth.uid == uid || isAdmin() || isAdminEmail());
+      allow delete: if isAdmin() || isAdminEmail();
+    }
+
+    match /courses/{courseId} {
+      allow create: if isDocente() && request.resource.data.createdBy == request.auth.uid;
+      allow read: if isAuthed() && (isAdmin() || resource.data.createdBy == request.auth.uid || request.resource.data.createdBy == request.auth.uid);
+      allow update, delete: if isDocente() && resource.data.createdBy == request.auth.uid;
+    }
+
+    match /students/{studentId} {
+      allow create, read, update: if isAuthed();
+      allow delete: if (isAdmin() || isAdminEmail());
+    }
+
+    match /classrooms/{classroomId} {
+      // Permitir operaciones básicas a usuarios autenticados
+      allow create, read, update: if isAuthed();
+      
+      // Eliminar: Solo admin
+      allow delete: if (isAdmin() || isAdminEmail());
+    }
+
+    match /attendance/{attendanceId} {
+      // Crear: Solo docentes o admin
+      allow create: if isDocenteOrAdmin();
+
+      // Leer: Permitir lectura amplia para docentes y admin
+      allow read: if isDocenteOrAdmin();
+
+      // Actualizar: permitir actualizaciones flexibles para docentes
+      allow update: if isDocenteOrAdmin() &&
+        // Validar que el docente tenga acceso al aula si no es admin
+        (
+          (isAdmin() || isAdminEmail()) ||
+          (isDocente() && (
+            resource.data.keys().hasAny(['classroomId']) == false ||
+            hasClassroomAccess(resource.data.classroomId)
+          ))
+        ) &&
+        // Validar que el status sea válido si se está cambiando
+        (
+          !request.resource.data.diff(resource.data).changedKeys().hasAny(['status']) ||
+          (request.resource.data.status in ['present', 'late', 'absent', 'presente', 'tarde', 'ausente'])
+        ) &&
+        // Permitir campos adicionales necesarios
+        (
+          !request.resource.data.diff(resource.data).changedKeys().hasAny(['editedBy']) ||
+          (request.resource.data.editedBy is string)
+        );
+
+      // Eliminar: solo admin
+      allow delete: if (isAdmin() || isAdminEmail());
+    }
+
+    // Reglas para las sesiones de asistencia
+    match /attendance_sessions/{sessionId} {
+      allow create, read, update: if isAuthed();
+      allow delete: if (isAdmin() || isAdminEmail());
+    }
+
+    // Reglas para los registros de asistencia legados (si se usan)
+    match /attendances/{attendanceRecordId} {
+      allow create, read: if isAuthed();
+      // Restringir updates a admin para evitar inconsistencias con el modelo actual
+      allow update, delete: if (isAdmin() || isAdminEmail());
+    }
+
+    // Reglas para la colección de whatsapp logs
+    match /whatslog/{id} {
+      allow read: if isAdmin() || isAdminEmail();
+      allow write: if false; // solo Functions
+    }
+  }
+}
