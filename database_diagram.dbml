@@ -1,0 +1,324 @@
+// Sistema de Asistencias Escolares - Diagrama de Base de Datos
+// Generado para dbdiagram.io
+// Fecha: 2025-11-18
+
+Project asistencias_app {
+  database_type: 'Firebase Firestore'
+  Note: '''
+    # Sistema de Control de Asistencias Escolares
+    
+    Sistema completo para gestión de asistencias con:
+    - Autenticación de usuarios (Admin/Docentes)
+    - Gestión de aulas y estudiantes
+    - Registro de asistencias por QR
+    - Reportes con IA (Vertex AI)
+    - Notificaciones por Telegram
+  '''
+}
+
+// ============================================================
+// TABLA: users
+// Usuarios del sistema (Administradores y Docentes)
+// ============================================================
+Table users {
+  uid varchar [pk, note: 'ID único de Firebase Auth']
+  email varchar [not null, unique, note: 'Correo electrónico']
+  fullName varchar [not null, note: 'Nombre completo']
+  role varchar [not null, note: 'admin | docente']
+  isActive boolean [not null, default: true, note: 'Usuario activo']
+  createdAt timestamp [not null, default: `now()`]
+  
+  Note: 'Usuarios autenticados del sistema'
+  Indexes {
+    email [unique]
+    role
+    isActive
+  }
+}
+
+// ============================================================
+// TABLA: classrooms
+// Aulas/Salones de clase
+// ============================================================
+Table classrooms {
+  id varchar [pk, note: 'ID único del aula']
+  name varchar [not null, note: 'Nombre del aula (ej: "5to A")']
+  grade varchar [not null, note: 'Grado (ej: "5to", "1ero")']
+  section varchar [not null, note: 'Sección (ej: "A", "B")']
+  teacherUid varchar [ref: > users.uid, note: 'Docente asignado']
+  teacherName varchar [note: 'Nombre del docente (desnormalizado)']
+  capacity int [not null, default: 30, note: 'Capacidad máxima']
+  description text [note: 'Descripción opcional']
+  isActive boolean [not null, default: true]
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null, default: `now()`]
+  schedule json [note: 'Horarios por día de semana']
+  
+  Note: '''
+    Aulas del centro educativo.
+    Cada aula tiene un docente asignado y múltiples estudiantes.
+    
+    Schedule Format:
+    {
+      "monday": {
+        "dayOfWeek": "monday",
+        "startTime": "08:00",
+        "endTime": "13:00",
+        "maxLateTime": "08:15"
+      },
+      ...
+    }
+  '''
+  
+  Indexes {
+    teacherUid
+    (grade, section) [unique, name: 'unique_grade_section']
+    isActive
+  }
+}
+
+// ============================================================
+// TABLA: students
+// Estudiantes/Alumnos
+// ============================================================
+Table students {
+  id varchar [pk, note: 'ID único del estudiante']
+  firstName varchar [not null, note: 'Nombres']
+  lastName varchar [not null, note: 'Apellidos']
+  dni varchar [not null, unique, note: 'DNI del estudiante']
+  qrCode varchar [not null, unique, note: 'Código QR único (STU-timestamp-random)']
+  classroomId varchar [ref: > classrooms.id, not null, note: 'Aula asignada']
+  parentEmail varchar [note: 'Email del apoderado']
+  parentPhone varchar [note: 'Teléfono del apoderado']
+  isActive boolean [not null, default: true]
+  createdAt timestamp [not null, default: `now()`]
+  updatedAt timestamp [not null, default: `now()`]
+  
+  Note: '''
+    Estudiantes matriculados en el sistema.
+    Cada estudiante tiene un QR único para tomar asistencia.
+    
+    QR Code Format: STU-{timestamp}-{random}
+    Ejemplo: STU-1700342400000-1234
+  '''
+  
+  Indexes {
+    dni [unique]
+    qrCode [unique]
+    classroomId
+    isActive
+    (firstName, lastName) [name: 'student_fullname']
+  }
+}
+
+// ============================================================
+// TABLA: attendance
+// Registros de asistencia diaria
+// ============================================================
+Table attendance {
+  id varchar [pk, note: 'ID único del registro']
+  studentId varchar [ref: > students.id, not null]
+  studentName varchar [not null, note: 'Nombre completo (desnormalizado)']
+  studentDni varchar [not null, note: 'DNI (desnormalizado)']
+  classroomId varchar [ref: > classrooms.id, not null]
+  classroomName varchar [not null, note: 'Nombre del aula (desnormalizado)']
+  teacherUid varchar [ref: > users.uid, not null]
+  teacherName varchar [not null, note: 'Nombre docente (desnormalizado)']
+  date timestamp [not null, note: 'Fecha de la asistencia (día completo)']
+  recordedAt timestamp [not null, default: `now()`, note: 'Hora exacta de registro']
+  status varchar [not null, note: 'presente | ausente | tardanza | justificado']
+  notes text [note: 'Observaciones adicionales']
+  qrCodeScanned varchar [note: 'QR del estudiante escaneado']
+  source varchar [note: 'Origen: qr | manual | auto']
+  metadata json [note: 'Info adicional (ubicación, dispositivo, etc.)']
+  
+  Note: '''
+    Registro diario de asistencias.
+    
+    Status Values:
+    - presente: Asistió a tiempo (✅)
+    - tardanza: Llegó tarde (⏰)
+    - ausente: No asistió (❌)
+    - justificado: Falta justificada (📋)
+    
+    Source:
+    - qr: Escaneado con QR
+    - manual: Ingresado manualmente
+    - auto: Generado automáticamente
+  '''
+  
+  Indexes {
+    studentId
+    classroomId
+    teacherUid
+    date
+    status
+    (studentId, date) [unique, name: 'unique_student_date']
+    (classroomId, date) [name: 'classroom_daily']
+  }
+}
+
+// ============================================================
+// TABLA: ai_reports
+// Reportes generados con IA (Vertex AI - Gemini Pro)
+// ============================================================
+Table ai_reports {
+  id varchar [pk, note: 'ID único del reporte']
+  classroomId varchar [ref: > classrooms.id, not null]
+  classroomName varchar [not null]
+  teacherUid varchar [ref: > users.uid, not null]
+  teacherName varchar [not null]
+  startDate timestamp [not null, note: 'Fecha inicio del análisis']
+  endDate timestamp [not null, note: 'Fecha fin del análisis']
+  totalStudents int [not null, note: 'Total de estudiantes analizados']
+  totalRecords int [not null, note: 'Total de registros procesados']
+  analysis text [not null, note: 'Análisis generado por IA (Markdown)']
+  summary json [note: 'Resumen estadístico estructurado']
+  model varchar [note: 'Modelo IA usado (gemini-pro)']
+  createdAt timestamp [not null, default: `now()`]
+  
+  Note: '''
+    Reportes de análisis generados por IA usando Vertex AI.
+    
+    El análisis incluye:
+    - Patrones de asistencia
+    - Tendencias y alertas
+    - Recomendaciones pedagógicas
+    - Análisis de puntualidad
+    
+    Model: gemini-pro (Vertex AI)
+  '''
+  
+  Indexes {
+    classroomId
+    teacherUid
+    createdAt
+    (classroomId, startDate, endDate) [name: 'classroom_period']
+  }
+}
+
+// ============================================================
+// TABLA: report_exports
+// Historial de exportaciones (Excel, PDF)
+// ============================================================
+Table report_exports {
+  id varchar [pk, note: 'ID único de la exportación']
+  classroomId varchar [ref: > classrooms.id, not null]
+  teacherUid varchar [ref: > users.uid, not null]
+  exportType varchar [not null, note: 'excel | pdf | siagie']
+  startDate timestamp [not null]
+  endDate timestamp [not null]
+  totalRecords int [not null, note: 'Cantidad de registros exportados']
+  fileName varchar [note: 'Nombre del archivo generado']
+  fileSize int [note: 'Tamaño en bytes']
+  createdAt timestamp [not null, default: `now()`]
+  
+  Note: '''
+    Registro de exportaciones realizadas.
+    
+    Export Types:
+    - excel: Formato UGEL 06 (color-coded)
+    - pdf: Formato SIAGIE (landscape, días del mes)
+    - siagie: Formato oficial SIAGIE
+  '''
+  
+  Indexes {
+    classroomId
+    teacherUid
+    exportType
+    createdAt
+  }
+}
+
+// ============================================================
+// RELACIONES PRINCIPALES
+// ============================================================
+
+Ref: classrooms.teacherUid > users.uid [note: 'Docente asignado al aula']
+Ref: students.classroomId > classrooms.id [note: 'Estudiantes pertenecen a un aula']
+Ref: attendance.studentId > students.id [note: 'Asistencia de un estudiante']
+Ref: attendance.classroomId > classrooms.id [note: 'Asistencia en un aula']
+Ref: attendance.teacherUid > users.uid [note: 'Asistencia registrada por docente']
+Ref: ai_reports.classroomId > classrooms.id [note: 'Reporte IA de un aula']
+Ref: ai_reports.teacherUid > users.uid [note: 'Reporte generado por docente']
+Ref: report_exports.classroomId > classrooms.id [note: 'Exportación de datos de aula']
+Ref: report_exports.teacherUid > users.uid [note: 'Exportación realizada por docente']
+
+// ============================================================
+// ENUMS Y TIPOS DE DATOS
+// ============================================================
+
+Enum user_role {
+  admin [note: 'Administrador del sistema']
+  docente [note: 'Docente/Profesor']
+}
+
+Enum attendance_status {
+  presente [note: '✅ Asistió a tiempo']
+  tardanza [note: '⏰ Llegó tarde']
+  ausente [note: '❌ No asistió']
+  justificado [note: '📋 Falta justificada']
+}
+
+Enum attendance_source {
+  qr [note: 'Escaneado con QR']
+  manual [note: 'Ingresado manualmente']
+  auto [note: 'Generado automáticamente']
+}
+
+Enum export_type {
+  excel [note: 'Excel UGEL 06 (color-coded)']
+  pdf [note: 'PDF SIAGIE (landscape)']
+  siagie [note: 'Formato oficial SIAGIE']
+}
+
+// ============================================================
+// TABLA DE GRUPO: schedule (embebido en classrooms)
+// ============================================================
+
+TableGroup class_schedules {
+  classrooms [note: 'Horarios embebidos en JSON dentro de classrooms.schedule']
+}
+
+// ============================================================
+// NOTAS TÉCNICAS
+// ============================================================
+
+Note technical_notes {
+  '''
+  # Notas Técnicas del Sistema
+  
+  ## Base de Datos
+  - Motor: Firebase Firestore (NoSQL)
+  - Tipo: Document-based database
+  - Colecciones principales: 7
+  
+  ## Desnormalización
+  Se desnormalizan algunos campos (nombres, DNI) para:
+  - Mejorar rendimiento de queries
+  - Reducir lecturas a Firestore
+  - Mantener historial inmutable
+  
+  ## Índices Compuestos
+  Algunos índices requieren configuración en Firebase:
+  - (studentId, date) → Evitar duplicados diarios
+  - (classroomId, date) → Queries rápidas por aula/día
+  - (grade, section) → Aulas únicas
+  
+  ## Triggers y Cloud Functions
+  - telegram-bot: Notificaciones automáticas
+  - ai-reports: Análisis con Vertex AI
+  - reports-api: Exportación Excel/PDF
+  
+  ## Reglas de Seguridad
+  - Administradores: Acceso total
+  - Docentes: Solo sus aulas asignadas
+  - Validación de datos en el cliente y servidor
+  
+  ## Rendimiento
+  - Cache en memoria (Flutter app)
+  - AutomaticKeepAliveClientMixin
+  - StreamBuilder con cache
+  - Queries optimizados con índices
+  '''
+}

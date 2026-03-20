@@ -94,6 +94,49 @@ function getAttendanceDate(attendanceData: any): Date {
   return new Date(raw);
 }
 
+function getStudentDisplayName(student: any): string {
+  const firstName = student?.firstName || '';
+  const lastName = student?.lastName || '';
+  const fullName = `${firstName} ${lastName}`.trim();
+  if (fullName) return fullName;
+  if (student?.fullName) return String(student.fullName).trim();
+  return 'Estudiante';
+}
+
+function getParentPhone(student: any): string {
+  return (
+    student?.parentPhone ||
+    student?.telefonoApoderado ||
+    student?.telefonoPadre ||
+    student?.parent_phone ||
+    ''
+  );
+}
+
+async function findStudentById(studentId: string) {
+  // Flujo principal en app Flutter
+  const studentsDoc = await db.collection('students').doc(studentId).get();
+  if (studentsDoc.exists) {
+    return {
+      data: studentsDoc.data(),
+      ref: studentsDoc.ref,
+      sourceCollection: 'students',
+    };
+  }
+
+  // Compatibilidad con flujo backend (idAlumno en colección users)
+  const usersDoc = await db.collection('users').doc(studentId).get();
+  if (usersDoc.exists) {
+    return {
+      data: usersDoc.data(),
+      ref: usersDoc.ref,
+      sourceCollection: 'users',
+    };
+  }
+
+  return null;
+}
+
 async function processAttendanceEvent(event: any) {
   console.log('🚀 INICIANDO TRIGGER TELEGRAM - Documento ID:', event.params.docId);
   try {
@@ -122,7 +165,7 @@ async function processAttendanceEvent(event: any) {
     const beforeData = event.data?.before?.data ? event.data.before.data() : null;
     const statusRaw = attendanceData.status || attendanceData.estado || '';
     const status = `${statusRaw}`.toLowerCase();
-    const allowedStatuses = new Set(['present', 'late', 'presente', 'tardanza']);
+    const allowedStatuses = new Set(['present', 'late', 'presente', 'tardanza', 'tarde']);
     if (!allowedStatuses.has(status)) {
       console.log('⏭️ Estado no notificado:', statusRaw);
       await logTelegramEvent({ type: 'skip.status', docId: event.params.docId, status: statusRaw });
@@ -162,14 +205,16 @@ async function processAttendanceEvent(event: any) {
       return;
     }
     console.log('🔍 Buscando estudiante con ID:', studentId);
-    const studentDoc = await db.collection('students').doc(studentId).get();
-    if (!studentDoc.exists) {
-      console.log('❌ Estudiante no encontrado con ID:', studentId);
-      await logTelegramEvent({ type: 'trigger.studentNotFound', docId: event.params.docId, studentId });
+    const studentLookup = await findStudentById(studentId);
+    if (!studentLookup) {
+      console.log('❌ Estudiante no encontrado con ID:', studentId, '(buscado en students y users)');
+      await logTelegramEvent({ type: 'trigger.studentNotFound', docId: event.params.docId, studentId, searchedCollections: ['students', 'users'] });
       return;
     }
-    const student = studentDoc.data();
-    console.log('👤 Estudiante encontrado:', student?.firstName, student?.lastName);
+    const student = studentLookup.data;
+    const studentRef = studentLookup.ref;
+    const studentName = getStudentDisplayName(student);
+    console.log('👤 Estudiante encontrado:', studentName, 'en', studentLookup.sourceCollection);
 
     // Evitar notificaciones duplicadas el mismo día por alumno
     const dayKey = getDayKeyLima(getAttendanceDate(attendanceData));
@@ -181,13 +226,13 @@ async function processAttendanceEvent(event: any) {
     if (!student?.parentTelegramChatId) {
       console.log('🆕 Primera vez - enviando código de activación');
       await logTelegramEvent({ type: 'activation.start', docId: event.params.docId, studentId, classroomId });
-      await sendActivationCode({ ...student, _id: studentDoc.id }, { ...attendanceData, studentId, classroomId });
-      await db.collection('students').doc(studentDoc.id).set({ lastTelegramNotifiedDayKey: dayKey }, { merge: true });
+      await sendActivationCode({ ...student, _id: studentRef.id }, { ...attendanceData, studentId, classroomId });
+      await studentRef.set({ lastTelegramNotifiedDayKey: dayKey }, { merge: true });
     } else {
       console.log('🔁 Ya vinculado - enviando notificación normal');
       await logTelegramEvent({ type: 'regular.start', docId: event.params.docId, studentId, classroomId, chatId: student.parentTelegramChatId });
-      await sendRegularNotification({ ...student, _id: studentDoc.id }, { ...attendanceData, studentId, classroomId });
-      await db.collection('students').doc(studentDoc.id).set({ lastTelegramNotifiedDayKey: dayKey }, { merge: true });
+      await sendRegularNotification({ ...student, _id: studentRef.id }, { ...attendanceData, studentId, classroomId });
+      await studentRef.set({ lastTelegramNotifiedDayKey: dayKey }, { merge: true });
     }
   } catch (error) {
     console.error('Error enviando notificación de Telegram:', error);
@@ -196,7 +241,12 @@ async function processAttendanceEvent(event: any) {
 }
 
 // Función que se ejecuta automáticamente cuando se crea o modifica una asistencia (colección principal)
-export const sendTelegramNotification = onDocumentWritten('asistencias/{docId}', async (event) => {
+export const sendTelegramNotification = onDocumentWritten({
+  document: 'asistencias/{docId}',
+  memory: '128MiB',
+  timeoutSeconds: 60,
+  maxInstances: 5,
+}, async (event) => {
   await processAttendanceEvent(event);
 });
 
@@ -208,29 +258,32 @@ export const sendTelegramNotificationLegacy = onDocumentWritten('attendance/{doc
 // 🆕 Función para enviar código de activación (PRIMERA VEZ)
 async function sendActivationCode(student: any, attendanceData: any) {
   try {
+    const studentName = getStudentDisplayName(student);
+    const parentPhone = getParentPhone(student);
+
     // Solo si tiene teléfono configurado
-    if (!student?.parentPhone) {
-      console.log(`❌ Padre de ${student?.firstName} no tiene teléfono configurado`);
+    if (!parentPhone) {
+      console.log(`❌ Padre de ${studentName} no tiene teléfono configurado`);
       return;
     }
     
-    console.log('📞 Teléfono del padre encontrado:', student.parentPhone);
-    console.log('📞 Tipo de teléfono:', typeof student.parentPhone);
-    console.log('📞 Longitud:', student.parentPhone?.length);
+    console.log('📞 Teléfono del padre encontrado:', parentPhone);
+    console.log('📞 Tipo de teléfono:', typeof parentPhone);
+    console.log('📞 Longitud:', parentPhone?.length);
     
     // Generar código único
     const activationCode = generateLinkingCode();
     
     // Normalizar teléfono
-    const parentPhoneDigits = toDigits(student.parentPhone);
-    const parentPhoneE164 = toE164Peru(student.parentPhone);
+    const parentPhoneDigits = toDigits(parentPhone);
+    const parentPhoneE164 = toE164Peru(parentPhone);
 
     // Guardar código temporal en Firebase
     await db.collection('activation_codes').add({
       code: activationCode,
       studentId: student._id || student.id || attendanceData.studentId,
-      studentName: `${student.firstName} ${student.lastName}`,
-      parentPhone: student.parentPhone,
+      studentName,
+      parentPhone,
       parentPhoneDigits,
       parentPhoneE164,
       createdAt: new Date(),
@@ -252,7 +305,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
     }
     
   const { dateStr, timeStr } = formatAttendanceDateTime(attendanceData);
-  const activationMessage = `🎓 *¡${student.firstName} ${student.lastName} registró asistencia!*
+  const activationMessage = `🎓 *¡${studentName} registró asistencia!*
 
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
@@ -268,7 +321,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
     
     // 📱 ENVIAR CÓDIGO INMEDIATAMENTE si el padre ya habló con el bot
   const parentDigits = parentPhoneDigits;
-    console.log('📱 Buscando mensajes pendientes para teléfono:', student.parentPhone);
+  console.log('📱 Buscando mensajes pendientes para teléfono:', parentPhone);
     console.log('🔍 E164 normalizado:', parentPhoneE164);
     console.log('🔢 Dígitos normalizados:', parentDigits);
     
@@ -322,7 +375,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
     } else {
       // Guardar para cuando el usuario escriba /start
       await db.collection('pending_activations').add({
-        phoneNumber: student.parentPhone,
+        phoneNumber: parentPhone,
         phoneDigits: parentPhoneDigits,
         phoneE164: parentPhoneE164,
         message: activationMessage,
@@ -337,7 +390,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
       await logTelegramEvent({ type: 'activation.savedPending', studentId: attendanceData.studentId, phoneE164: parentPhoneE164 });
     }
     
-    console.log(`✅ Código de activación enviado para ${student.firstName}: ${activationCode}`);
+    console.log(`✅ Código de activación enviado para ${studentName}: ${activationCode}`);
     
   } catch (error) {
     console.error('Error enviando código de activación:', error);
@@ -347,6 +400,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
 // 🔁 Función para notificación normal (SIGUIENTES VECES)
 async function sendRegularNotification(student: any, attendanceData: any) {
   try {
+    const studentName = getStudentDisplayName(student);
     let classroomName = 'No especificada';
     
     if (attendanceData.classroomId || attendanceData.idCurso) {
@@ -363,7 +417,7 @@ async function sendRegularNotification(student: any, attendanceData: any) {
   const { dateStr, timeStr } = formatAttendanceDateTime(attendanceData);
   const message = `🎓 *Asistencia Registrada*
 
-👨‍🎓 *Estudiante:* ${student.firstName} ${student.lastName}
+👨‍🎓 *Estudiante:* ${studentName}
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
 ⏰ *Hora:* ${timeStr}
@@ -376,7 +430,7 @@ async function sendRegularNotification(student: any, attendanceData: any) {
       parse_mode: 'Markdown'
     });
     
-    console.log(`Notificación regular enviada a padre de ${student.firstName}`);
+    console.log(`Notificación regular enviada a padre de ${studentName}`);
     await logTelegramEvent({ type: 'regular.sent', studentId: attendanceData.studentId, chatId: student.parentTelegramChatId });
     
   } catch (error) {

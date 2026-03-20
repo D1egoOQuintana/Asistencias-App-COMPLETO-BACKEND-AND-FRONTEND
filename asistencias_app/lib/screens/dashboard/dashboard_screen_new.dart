@@ -14,6 +14,7 @@ import '../admin/students/improved_student_screen.dart';
 import '../admin/classrooms/improved_classroom_screen.dart';
 import '../teacher/classrooms/teacher_classrooms_screen.dart';
 import '../teacher/students/teacher_students_screen.dart';
+import '../teacher/reports/teacher_reports_screen.dart';
 import 'improved_home_screen.dart';
 
 /// Dashboard principal con sidebar responsive
@@ -246,9 +247,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           icon: Icons.people,
         ),
         const AdminMenuItem(
-          title: 'Historial',
-          route: '/history',
-          icon: Icons.history,
+          title: 'Reportes Profesionales',
+          route: '/professional-reports',
+          icon: Icons.assessment,
         ),
       ]);
     }
@@ -277,8 +278,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return const TeacherStudentsScreen();
       case '/attendance':
         return const TakeAttendanceScreen();
-      case '/history':
-        return const TakeAttendanceScreen();
+      case '/professional-reports':
+        return const TeacherReportsScreen();
       default:
         return const ImprovedHomeScreen();
     }
@@ -505,14 +506,7 @@ class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
   @override
   Widget build(BuildContext context) =>
-      const Center(child: Text('Reportes - Próximamente'));
-}
-
-class MyClassroomPlaceholder extends StatelessWidget {
-  const MyClassroomPlaceholder({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Mi Aula - Próximamente'));
+      const Center(child: Text('Reportes Administrador - Próximamente'));
 }
 
 class MyStudentsPlaceholder extends StatelessWidget {

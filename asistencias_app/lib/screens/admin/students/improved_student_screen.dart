@@ -125,16 +125,66 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
     super.build(context); // Required for AutomaticKeepAliveClientMixin
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gestión de Estudiantes'),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
-      ),
+      backgroundColor: const Color(0xFFF8F6F6),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A227F).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.groups,
+                      color: Color(0xFF1A227F),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Centro de Alumnos',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          'Gestión académica',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.notifications_none),
+                    color: const Color(0xFF64748B),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             // Formulario para crear estudiante
             Card(
               elevation: 4,
@@ -149,7 +199,7 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                         children: [
                           Icon(
                             Icons.person_add,
-                            color: Colors.purple.shade700,
+                            color: const Color(0xFF1A227F),
                             size: 28,
                           ),
                           const SizedBox(width: 12),
@@ -160,7 +210,7 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.headlineSmall
                                   ?.copyWith(
-                                    color: Colors.purple.shade700,
+                                    color: const Color(0xFF1A227F),
                                     fontWeight: FontWeight.bold,
                                   ),
                             ),
@@ -353,7 +403,7 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _saveStudent,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple.shade700,
+                            backgroundColor: const Color(0xFF1A227F),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -433,7 +483,7 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.groups, color: Colors.purple.shade700),
+                        const Icon(Icons.groups, color: Color(0xFF1A227F)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -442,7 +492,7 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(
-                                  color: Colors.purple.shade700,
+                                  color: const Color(0xFF1A227F),
                                   fontWeight: FontWeight.bold,
                                 ),
                           ),
@@ -544,14 +594,14 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.purple.shade50,
+                                color: const Color(0xFFE0E7FF),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
                                   Icon(
                                     Icons.info,
-                                    color: Colors.purple.shade700,
+                                    color: const Color(0xFF1A227F),
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
@@ -559,7 +609,7 @@ class _ImprovedStudentScreenState extends State<ImprovedStudentScreen>
                                         ? 'Total: ${allStudents.length} estudiantes'
                                         : 'Mostrando: ${filteredStudents.length} de ${allStudents.length} estudiantes',
                                     style: TextStyle(
-                                      color: Colors.purple.shade700,
+                                      color: const Color(0xFF1A227F),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),

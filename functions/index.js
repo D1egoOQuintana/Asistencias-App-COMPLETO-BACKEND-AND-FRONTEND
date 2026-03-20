@@ -4,20 +4,40 @@
  * Aplicando buenas prácticas 2025
  */
 
-const { setGlobalOptions } = require("firebase-functions/v2");
+// Importar las funciones compiladas desde el directorio lib (TypeScript)
+let tsModules;
+try {
+  tsModules = require("./lib/index");
+  exports.api = tsModules.api;
+  exports.auth = tsModules.auth;
+  exports.whatsappOnAttendanceCreate = tsModules.whatsappOnAttendanceCreate;
+  
+  // ✅ USAR FUNCIONES DE TELEGRAM DEL ARCHIVO telegram.ts (compilado)
+  exports.sendTelegramNotification = tsModules.sendTelegramNotification;
+  exports.sendTelegramNotificationLegacy = tsModules.sendTelegramNotificationLegacy;
+  exports.handleTelegramWebhook = tsModules.handleTelegramWebhook;
+  
+  console.log('✅ Funciones de Telegram cargadas desde telegram.ts');
+} catch (error) {
+  console.error('Error cargando módulos TypeScript:', error);
+}
 
-// Configuración global para control de costos
-setGlobalOptions({ maxInstances: 10 });
+// Importar funciones de IA para reportes (JavaScript)
+try {
+  const aiReports = require('./ai-reports');
+  exports.generateReportWithAI = aiReports.generateReportWithAI;
+  exports.getAIReportsHistory = aiReports.getAIReportsHistory;
+} catch (error) {
+  console.error('Error cargando funciones de IA:', error);
+}
 
-// Importar las funciones compiladas desde el directorio lib
-const { api, auth, whatsappOnAttendanceCreate } = require("./lib/index");
-
-// Importar funciones de Telegram
-const { sendTelegramNotification, handleTelegramWebhook } = require('./telegram-functions');
-
-// Exportar las Cloud Functions
-exports.api = api;
-exports.auth = auth;
-exports.whatsappOnAttendanceCreate = whatsappOnAttendanceCreate;
-exports.sendTelegramNotification = sendTelegramNotification;
-exports.handleTelegramWebhook = handleTelegramWebhook;
+// Importar API profesional de reportes (JavaScript)
+try {
+  const reportsApi = require('./reports-api');
+  exports.getAttendanceReportData = reportsApi.getAttendanceReportData;
+  exports.getConsolidatedReport = reportsApi.getConsolidatedReport;
+  exports.exportReportData = reportsApi.exportReportData;
+  exports.getAttendanceTrends = reportsApi.getAttendanceTrends;
+} catch (error) {
+  console.error('Error cargando API de reportes:', error);
+}

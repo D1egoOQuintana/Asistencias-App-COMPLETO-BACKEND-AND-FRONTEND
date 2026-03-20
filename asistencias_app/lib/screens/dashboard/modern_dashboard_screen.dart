@@ -3,13 +3,13 @@ import 'package:provider/provider.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../themes/app_themes.dart';
-import '../teacher/attendance/take_attendance_screen.dart';
+import '../teacher/attendance/quick_qr_attendance_screen.dart';
 import '../admin/teachers/teachers_management_screen.dart';
-import '../admin/database/database_setup_screen.dart';
 import '../admin/students/improved_student_screen.dart';
 import '../admin/classrooms/improved_classroom_screen.dart';
 import '../teacher/classrooms/teacher_classrooms_screen.dart';
 import '../teacher/students/teacher_students_screen.dart';
+import '../teacher/reports/teacher_reports_screen.dart';
 import 'improved_home_screen.dart';
 
 /// Dashboard moderno con navegación inferior estilo Instagram
@@ -91,7 +91,7 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
             Icons.home_outlined,
             Icons.class_outlined,
             Icons.people_outline,
-            Icons.history_outlined,
+            Icons.assessment_outlined,
           ]
         : [
             Icons.home_outlined,
@@ -101,57 +101,30 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
           ];
 
     final List<IconData> iconListFilled = isTeacher
-        ? [Icons.home, Icons.class_, Icons.people, Icons.history]
+        ? [Icons.home, Icons.class_, Icons.people, Icons.assessment]
         : [Icons.home, Icons.people, Icons.school, Icons.class_];
 
     final List<String> labelList = isTeacher
-        ? ['Inicio', 'Mis Aulas', 'Alumnos', 'Historial']
+        ? ['Inicio', 'Mis Aulas', 'Alumnos', 'Reportes']
         : ['Inicio', 'Docentes', 'Estudiantes', 'Aulas'];
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          labelList[_currentIndex],
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-        ),
-        backgroundColor: AppThemes.getThemeForRole(user.role).primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          // Avatar del usuario
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: GestureDetector(
-              onTap: () => _showProfileMenu(context),
-              child: Hero(
-                tag: 'user_avatar',
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF64B5F6), Color(0xFF42A5F5)],
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      user.email.substring(0, 1).toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
+      appBar: user.role == UserRole.admin
+          ? AppBar(
+              title: const Text(
+                'Panel Admin',
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
-            ),
-          ),
-        ],
-      ),
+              actions: [
+                IconButton(
+                  tooltip: 'Cerrar sesión',
+                  icon: const Icon(Icons.logout_rounded),
+                  onPressed: () => _showLogoutDialog(context),
+                ),
+              ],
+            )
+          : null,
       body: PageView(
         controller: _pageController,
         onPageChanged: (index) {
@@ -168,8 +141,13 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
               scale: _fabAnimationController,
               child: FloatingActionButton(
                 onPressed: () {
-                  // Acción central (ej: escanear QR)
-                  _showCenterAction(context);
+                  // Navegar directamente al escáner QR
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const QuickQRAttendanceScreen(),
+                    ),
+                  );
                 },
                 backgroundColor: AppThemes.getThemeForRole(
                   user.role,
@@ -291,276 +269,29 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
         const ImprovedHomeScreen(),
         const TeacherClassroomsScreen(),
         const TeacherStudentsScreen(),
-        const TakeAttendanceScreen(),
+        const TeacherReportsScreen(),
       ];
     }
   }
 
-  /// Mostrar menú de perfil
-  void _showProfileMenu(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final user = authProvider.user!;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Indicador de drag
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Avatar y datos del usuario
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF64B5F6), Color(0xFF42A5F5)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF42A5F5).withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  user.email.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 32,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              user.email.split('@')[0],
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppThemes.getThemeForRole(
-                  user.role,
-                ).primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                user.role.displayName,
-                style: TextStyle(
-                  color: AppThemes.getThemeForRole(user.role).primaryColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Opciones
-            if (user.role == UserRole.admin) ...[
-              _buildMenuOption(
-                icon: Icons.analytics,
-                label: 'Ver Reportes',
-                onTap: () {
-                  Navigator.pop(context);
-                  // Navegar a reportes
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildMenuOption(
-                icon: Icons.settings,
-                label: 'Configurar BD',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DatabaseSetupScreen(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            _buildMenuOption(
-              icon: Icons.logout,
-              label: 'Cerrar Sesión',
-              color: Colors.red,
-              onTap: () {
-                Navigator.pop(context);
-                _showLogoutDialog(context);
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuOption({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    Color? color,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[200]!),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color ?? Colors.grey[700], size: 24),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: color ?? Colors.grey[900],
-                ),
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey[400]),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Mostrar acción central (QR scanner para docentes)
-  void _showCenterAction(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Icon(
-              Icons.qr_code_scanner,
-              size: 64,
-              color: Color(0xFF2196F3),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Escanear Código QR',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Escanea el código QR del estudiante para registrar asistencia',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // Aquí iría la navegación al scanner QR
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2196F3),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Abrir Escáner',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Mostrar diálogo de confirmación para cerrar sesión
   void _showLogoutDialog(BuildContext context) {
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Cerrar Sesión'),
-        content: const Text('¿Estás seguro que deseas cerrar sesión?'),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Deseas cerrar sesión ahora?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar', style: TextStyle(color: Colors.grey[600])),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.of(dialogContext).pop();
               Provider.of<AuthProvider>(context, listen: false).signOut();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Cerrar Sesión',
-              style: TextStyle(color: Colors.white),
-            ),
+            icon: const Icon(Icons.logout_rounded),
+            label: const Text('Cerrar sesión'),
           ),
         ],
       ),

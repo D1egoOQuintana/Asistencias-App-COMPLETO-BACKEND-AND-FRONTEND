@@ -1,20 +1,16 @@
-import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../models/classroom_model.dart';
-import '../../../services/teacher_service.dart';
 import '../../../theme/app_design_system.dart';
-import '../../../widgets/classroom/classroom_card.dart';
 import '../../../widgets/common/state_widgets.dart';
 import 'classroom_detail_screen.dart';
 
-enum ClassroomFilter { all, active, inactive }
-
-enum ViewMode { grid, list }
-
 class TeacherClassroomsScreen extends StatefulWidget {
-  const TeacherClassroomsScreen({super.key});
+  final bool showAppBar;
+
+  const TeacherClassroomsScreen({super.key, this.showAppBar = false});
 
   @override
   State<TeacherClassroomsScreen> createState() =>
@@ -23,28 +19,20 @@ class TeacherClassroomsScreen extends StatefulWidget {
 
 class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     with AutomaticKeepAliveClientMixin {
+  static const Color _brandBlue = Color(0xFF1976D2);
+  static const Color _darkPrimary = Color(0xFF1976D2);
+  static const Color _surfaceLow = Color(0xFFF2F4F5);
+  static const Color _outline = Color(0xFF5F6470);
+  static const Color _outlineVariant = Color(0xFFC5C6D2);
+  static const Color _secondary = Color(0xFF1976D2);
+  static const Color _secondaryFixed = Color(0xFFD8E2FF);
+  static const Color _onSecondaryFixedVariant = Color(0xFF1976D2);
+
   final User? _currentUser = FirebaseAuth.instance.currentUser;
-  final TextEditingController _searchController = TextEditingController();
-
-  ClassroomFilter _currentFilter = ClassroomFilter.all;
-  ViewMode _viewMode = ViewMode.grid;
-  String _searchQuery = '';
-
-  // Debounce timer para el buscador
-  Timer? _debounceTimer;
-
-  // Cache de datos para evitar recargas
   List<ClassroomModel>? _cachedClassrooms;
 
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _debounceTimer?.cancel();
-    super.dispose();
-  }
 
   void _openClassroomDetail(ClassroomModel classroom) {
     Navigator.of(context).push(
@@ -80,192 +68,633 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     );
   }
 
-  List<ClassroomModel> _filterClassrooms(List<ClassroomModel> classrooms) {
-    var filtered = classrooms;
-
-    // Aplicar filtro de estado
-    switch (_currentFilter) {
-      case ClassroomFilter.active:
-        filtered = filtered.where((c) => c.isActive).toList();
-        break;
-      case ClassroomFilter.inactive:
-        filtered = filtered.where((c) => !c.isActive).toList();
-        break;
-      case ClassroomFilter.all:
-        break;
+  String _formatClassName(ClassroomModel classroom) {
+    final section = classroom.section.trim();
+    final grade = classroom.grade.trim();
+    if (section.isEmpty) {
+      return grade.isNotEmpty ? grade : classroom.name;
     }
-
-    // Aplicar búsqueda
-    if (_searchQuery.isNotEmpty) {
-      final query = _searchQuery.toLowerCase();
-      filtered = filtered.where((classroom) {
-        return classroom.name.toLowerCase().contains(query) ||
-            classroom.grade.toLowerCase().contains(query) ||
-            classroom.section.toLowerCase().contains(query);
-      }).toList();
-    }
-
-    return filtered;
+    return '$grade $section'.trim();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+  int? _toMinutes(String? value) {
+    if (value == null || value.isEmpty || !value.contains(':')) return null;
+    final parts = value.split(':');
+    if (parts.length < 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    return hour * 60 + minute;
+  }
 
-    if (_currentUser == null) {
-      return Scaffold(
-        body: ErrorStateWidget(
-          message:
-              'Usuario no autenticado. Por favor inicia sesión nuevamente.',
-          icon: Icons.person_off,
-          onRetry: () => Navigator.of(context).pushReplacementNamed('/login'),
+  String _weekdayKey(DateTime date) {
+    const keys = [
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+      'sunday',
+    ];
+    return keys[date.weekday - 1];
+  }
+
+  ClassSchedule? _todaySchedule(ClassroomModel classroom) {
+    final schedule = classroom.schedule;
+    if (schedule == null || schedule.isEmpty) return null;
+    return schedule[_weekdayKey(DateTime.now())] ?? schedule.values.first;
+  }
+
+  bool _isLiveNow(ClassroomModel classroom) {
+    if (!classroom.isActive) return false;
+    final schedule = _todaySchedule(classroom);
+    if (schedule == null) return false;
+    final start = _toMinutes(schedule.startTime);
+    final end = _toMinutes(schedule.endTime);
+    if (start == null || end == null) return false;
+    final now = DateTime.now();
+    final current = now.hour * 60 + now.minute;
+    return current >= start && current <= end;
+  }
+
+  String _scheduleCaption(ClassroomModel classroom) {
+    final schedule = _todaySchedule(classroom);
+    if (schedule == null) return 'Horario pendiente';
+    if (schedule.startTime.isEmpty && schedule.endTime.isEmpty) {
+      return 'Horario pendiente';
+    }
+    if (schedule.endTime.isEmpty) {
+      return 'Programada • ${schedule.startTime}';
+    }
+    return '${schedule.startTime} - ${schedule.endTime}';
+  }
+
+  bool _isClassConfigured(ClassroomModel classroom) {
+    return classroom.hasSchedule;
+  }
+
+  List<ClassroomModel> _sortedActive(List<ClassroomModel> classrooms) {
+    final active = classrooms.where((classroom) => classroom.isActive).toList();
+    active.sort((a, b) {
+      final sa = _todaySchedule(a);
+      final sb = _todaySchedule(b);
+      final am = _toMinutes(sa?.startTime) ?? 24 * 60;
+      final bm = _toMinutes(sb?.startTime) ?? 24 * 60;
+      return am.compareTo(bm);
+    });
+    return active;
+  }
+
+  Widget _buildTopGlassBar(BuildContext context, String subtitle) {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDesignSystem.getSpaceMD(context),
+            vertical: AppDesignSystem.getSpaceSM(context),
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.9),
+            border: Border(
+              bottom: BorderSide(
+                color: _outlineVariant.withValues(alpha: 0.55),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: _brandBlue,
+                child: const Icon(
+                  Icons.school_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              SizedBox(width: AppDesignSystem.getSpaceSM(context)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Asistencias',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppDesignSystem.titleLarge(context).copyWith(
+                        color: _brandBlue,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.4,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppDesignSystem.bodySmall(context).copyWith(
+                        color: _outline,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: AppDesignSystem.backgroundLight,
-      body: SafeArea(child: _buildClassroomsList(context)),
-    );
-  }
-
-  Widget _buildFilterChips(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _buildFilterChip(
-            context,
-            label: 'Todas',
-            filter: ClassroomFilter.all,
-            icon: Icons.all_inclusive,
-          ),
-          SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-          _buildFilterChip(
-            context,
-            label: 'Activas',
-            filter: ClassroomFilter.active,
-            icon: Icons.check_circle,
-          ),
-          SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-          _buildFilterChip(
-            context,
-            label: 'Inactivas',
-            filter: ClassroomFilter.inactive,
-            icon: Icons.cancel,
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildFilterChip(
+  Widget _buildDashboardHeader(
     BuildContext context, {
-    required String label,
-    required ClassroomFilter filter,
-    required IconData icon,
+    required String title,
+    required String subtitle,
   }) {
-    final isSelected = _currentFilter == filter;
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: AppDesignSystem.spacing(context, 16),
-            color: isSelected
-                ? AppDesignSystem.textOnPrimary
-                : AppDesignSystem.textSecondary,
-          ),
-          SizedBox(width: AppDesignSystem.getSpaceXS(context)),
-          Text(label),
-        ],
-      ),
-      selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _currentFilter = filter;
-        });
-      },
-      backgroundColor: AppDesignSystem.backgroundLight,
-      selectedColor: AppDesignSystem.primaryColor,
-      checkmarkColor: AppDesignSystem.textOnPrimary,
-      labelStyle: AppDesignSystem.labelMedium(context).copyWith(
-        color: isSelected
-            ? AppDesignSystem.textOnPrimary
-            : AppDesignSystem.textPrimary,
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: AppDesignSystem.borderRadiusFull,
-        side: BorderSide(
-          color: isSelected
-              ? AppDesignSystem.primaryColor
-              : AppDesignSystem.borderColor,
-          width: isSelected ? 2 : 1,
-        ),
-      ),
+    return Padding(
       padding: AppDesignSystem.paddingSymmetric(
         context,
-        horizontal: AppDesignSystem.spaceSM,
-        vertical: AppDesignSystem.spaceXS,
+        horizontal: AppDesignSystem.spaceMD,
       ),
-    );
-  }
-
-  Widget _buildViewToggle(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppDesignSystem.backgroundLight,
-        borderRadius: AppDesignSystem.borderRadiusMD,
-        border: Border.all(color: AppDesignSystem.borderColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildViewButton(context, icon: Icons.grid_view, mode: ViewMode.grid),
-          Container(
-            width: 1,
-            height: AppDesignSystem.spacing(context, 24),
-            color: AppDesignSystem.borderColor,
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppDesignSystem.headlineLarge(context).copyWith(
+              color: _brandBlue,
+              fontSize: 40,
+              height: 0.95,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1.4,
+            ),
           ),
-          _buildViewButton(context, icon: Icons.view_list, mode: ViewMode.list),
+          SizedBox(height: AppDesignSystem.getSpaceSM(context)),
+          Text(
+            subtitle,
+            style: AppDesignSystem.bodyMedium(
+              context,
+            ).copyWith(color: _outline, fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildViewButton(
-    BuildContext context, {
-    required IconData icon,
-    required ViewMode mode,
-  }) {
-    final isSelected = _viewMode == mode;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _viewMode = mode;
-        });
-      },
-      borderRadius: AppDesignSystem.borderRadiusSM,
-      child: Container(
-        padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceSM),
-        child: Icon(
-          icon,
-          color: isSelected
-              ? AppDesignSystem.primaryColor
-              : AppDesignSystem.textSecondary,
-          size: AppDesignSystem.spacing(context, 20),
+  Widget _buildLiveCard(BuildContext context, ClassroomModel classroom) {
+    return Container(
+      width: double.infinity,
+      padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceLG),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.white, Color(0xFFF5FAFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1A000D33),
+            blurRadius: 26,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: _secondaryFixed,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: _secondary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'En vivo ahora',
+                    style: AppDesignSystem.labelMedium(context).copyWith(
+                      color: _onSecondaryFixedVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: AppDesignSystem.getSpaceSM(context)),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 700;
+              final iconBox = Container(
+                width: compact ? 74 : 96,
+                height: compact ? 74 : 96,
+                decoration: BoxDecoration(
+                  color: _surfaceLow,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  Icons.school_rounded,
+                  size: compact ? 36 : 48,
+                  color: _darkPrimary,
+                ),
+              );
+
+              final content = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _formatClassName(classroom),
+                    style: AppDesignSystem.headlineMedium(context).copyWith(
+                      color: _darkPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${classroom.name} • ${_scheduleCaption(classroom)}',
+                    style: AppDesignSystem.bodyMedium(
+                      context,
+                    ).copyWith(color: _outline, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _isClassConfigured(classroom)
+                          ? const Color(0xFFE7F6ED)
+                          : const Color(0xFFFFF4E5),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: _isClassConfigured(classroom)
+                            ? const Color(0xFFA7D7B8)
+                            : const Color(0xFFFFD9A8),
+                      ),
+                    ),
+                    child: Text(
+                      _isClassConfigured(classroom)
+                          ? 'Aula configurada'
+                          : 'Configurar aula',
+                      style: AppDesignSystem.bodySmall(context).copyWith(
+                        color: _isClassConfigured(classroom)
+                            ? const Color(0xFF1E7A3F)
+                            : const Color(0xFF9A5A00),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: AppDesignSystem.getSpaceMD(context)),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _openClassroomDetail(classroom),
+                        icon: const Icon(Icons.how_to_reg_rounded),
+                        label: const Text('Asistencia'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _darkPrimary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _openClassroomDetail(classroom),
+                        icon: const Icon(Icons.folder_open_rounded),
+                        label: const Text('Recursos'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _secondary,
+                          side: BorderSide(
+                            color: _outlineVariant.withValues(alpha: 0.4),
+                            width: 1.4,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [iconBox, const SizedBox(height: 16), content],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  iconBox,
+                  const SizedBox(width: 18),
+                  Expanded(child: content),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduledCard(BuildContext context, ClassroomModel classroom) {
+    return Container(
+      padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceLG),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFCFDFE),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _outlineVariant.withValues(alpha: 0.32)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000D33),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 62,
+                height: 62,
+                decoration: BoxDecoration(
+                  color: _surfaceLow,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.menu_book_rounded,
+                  color: _darkPrimary,
+                  size: 30,
+                ),
+              ),
+              const Spacer(),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECEEEF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'Programada • ${_scheduleCaption(classroom)}',
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppDesignSystem.bodySmall(context).copyWith(
+                      color: const Color(0xFF444650),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: AppDesignSystem.getSpaceMD(context)),
+          Text(
+            _formatClassName(classroom),
+            style: AppDesignSystem.titleLarge(
+              context,
+            ).copyWith(color: _darkPrimary, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${classroom.name} • Capacidad ${classroom.capacity}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppDesignSystem.bodyMedium(
+              context,
+            ).copyWith(color: _outline),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: _isClassConfigured(classroom)
+                  ? const Color(0xFFE7F6ED)
+                  : const Color(0xFFFFF4E5),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: _isClassConfigured(classroom)
+                    ? const Color(0xFFA7D7B8)
+                    : const Color(0xFFFFD9A8),
+              ),
+            ),
+            child: Text(
+              _isClassConfigured(classroom)
+                  ? 'Aula configurada'
+                  : 'Configurar aula',
+              style: AppDesignSystem.bodySmall(context).copyWith(
+                color: _isClassConfigured(classroom)
+                    ? const Color(0xFF1E7A3F)
+                    : const Color(0xFF9A5A00),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          SizedBox(height: AppDesignSystem.getSpaceLG(context)),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.lock_outline_rounded, size: 18),
+                  label: const Text('Asistencia'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _surfaceLow,
+                    foregroundColor: _darkPrimary,
+                    disabledBackgroundColor: _surfaceLow,
+                    disabledForegroundColor: _darkPrimary.withValues(
+                      alpha: 0.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _openClassroomDetail(classroom),
+                  icon: const Icon(Icons.description_outlined, size: 18),
+                  label: const Text('Recursos'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _secondary.withValues(alpha: 0.1),
+                    foregroundColor: _secondary,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinishedCard(BuildContext context, ClassroomModel classroom) {
+    return Container(
+      width: double.infinity,
+      padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceLG),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF2F6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _outlineVariant.withValues(alpha: 0.45)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
+
+          final left = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE1E3E4),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: _outline,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_formatClassName(classroom)} • Finalizada',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppDesignSystem.titleMedium(context).copyWith(
+                        color: _darkPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${classroom.name} • ${_scheduleCaption(classroom)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppDesignSystem.bodySmall(
+                        context,
+                      ).copyWith(color: _outline),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+
+          final actions = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _openClassroomDetail(classroom),
+                icon: const Icon(Icons.visibility_outlined, size: 16),
+                label: const Text('Ver lista'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _outline,
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                    color: _outlineVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openClassroomDetail(classroom),
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: const Text('Reporte'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _outline,
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                    color: _outlineVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [left, const SizedBox(height: 14), actions],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: left),
+              const SizedBox(width: 16),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildClassroomsList(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: TeacherService.getClassroomsByTeacher(_currentUser!.uid),
+      stream: FirebaseFirestore.instance
+          .collection('classrooms')
+          .where('teacherUid', isEqualTo: _currentUser!.uid)
+          .snapshots(),
       builder: (context, snapshot) {
-        // Mostrar loading solo en la primera carga
         if (snapshot.connectionState == ConnectionState.waiting &&
             _cachedClassrooms == null) {
           return const LoadingStateWidget(message: 'Cargando aulas...');
@@ -290,348 +719,204 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
           );
         }
 
-        // Actualizar cache solo cuando hay nuevos datos
-        if (snapshot.hasData) {
-          _cachedClassrooms = snapshot.data!.docs
-              .map((doc) => ClassroomModel.fromFirestore(doc))
-              .toList();
-        }
+        _cachedClassrooms = snapshot.data!.docs
+            .map((doc) => ClassroomModel.fromFirestore(doc))
+            .toList();
 
         final allClassrooms = _cachedClassrooms ?? [];
-        final filteredClassrooms = _filterClassrooms(allClassrooms);
+        final activeClassrooms = _sortedActive(allClassrooms);
+        final inactiveClassrooms = allClassrooms
+            .where((classroom) => !classroom.isActive)
+            .toList();
 
-        // Si no hay resultados después del filtro
-        if (filteredClassrooms.isEmpty) {
-          return CustomScrollView(
-            slivers: [
-              _buildSliverSearchBar(context),
-              _buildSliverFiltersAndView(context),
-              SliverFillRemaining(
-                child: EmptyStateWidget(
-                  icon: Icons.search_off,
-                  title: 'No se encontraron resultados',
-                  message: _searchQuery.isNotEmpty
-                      ? 'No hay aulas que coincidan con "$_searchQuery"'
-                      : 'No hay aulas ${_currentFilter == ClassroomFilter.active ? "activas" : "inactivas"} en este momento.',
-                  color: AppDesignSystem.textSecondary,
+        ClassroomModel? liveClassroom;
+        for (final classroom in activeClassrooms) {
+          if (_isLiveNow(classroom)) {
+            liveClassroom = classroom;
+            break;
+          }
+        }
+        liveClassroom ??= activeClassrooms.isNotEmpty
+            ? activeClassrooms.first
+            : null;
+
+        final scheduledClassrooms = activeClassrooms
+            .where((classroom) => classroom.id != liveClassroom?.id)
+            .take(2)
+            .toList();
+
+        final finishedClassroom = inactiveClassrooms.isNotEmpty
+            ? inactiveClassrooms.first
+            : null;
+
+        return Column(
+          children: [
+            if (!widget.showAppBar)
+              _buildTopGlassBar(context, 'Centro de aulas'),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(bottom: 10),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: AppDesignSystem.getSpaceMD(context)),
+                  _buildDashboardHeader(
+                    context,
+                    title: 'Aulas',
+                    subtitle: 'Gestión de asistencia y recursos curriculares.',
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF2F4F5), Color(0xFFEDEFF2)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: AppDesignSystem.getSpaceMD(context),
+                      ),
+                    ),
+                    if (liveClassroom != null)
+                      SliverPadding(
+                        padding: AppDesignSystem.paddingSymmetric(
+                          context,
+                          horizontal: AppDesignSystem.spaceMD,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: _buildLiveCard(context, liveClassroom),
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: AppDesignSystem.getSpaceLG(context),
+                      ),
+                    ),
+                    if (scheduledClassrooms.isNotEmpty)
+                      SliverPadding(
+                        padding: AppDesignSystem.paddingSymmetric(
+                          context,
+                          horizontal: AppDesignSystem.spaceMD,
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isCompact = constraints.maxWidth < 740;
+                              if (isCompact) {
+                                return Column(
+                                  children: [
+                                    for (
+                                      int i = 0;
+                                      i < scheduledClassrooms.length;
+                                      i++
+                                    ) ...[
+                                      _buildScheduledCard(
+                                        context,
+                                        scheduledClassrooms[i],
+                                      ),
+                                      if (i < scheduledClassrooms.length - 1)
+                                        SizedBox(
+                                          height: AppDesignSystem.getSpaceMD(
+                                            context,
+                                          ),
+                                        ),
+                                    ],
+                                  ],
+                                );
+                              }
+
+                              return Row(
+                                children: [
+                                  for (
+                                    int i = 0;
+                                    i < scheduledClassrooms.length;
+                                    i++
+                                  ) ...[
+                                    Expanded(
+                                      child: _buildScheduledCard(
+                                        context,
+                                        scheduledClassrooms[i],
+                                      ),
+                                    ),
+                                    if (i < scheduledClassrooms.length - 1)
+                                      SizedBox(
+                                        width: AppDesignSystem.getSpaceMD(
+                                          context,
+                                        ),
+                                      ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    if (finishedClassroom != null)
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          AppDesignSystem.getSpaceMD(context),
+                          AppDesignSystem.getSpaceLG(context),
+                          AppDesignSystem.getSpaceMD(context),
+                          AppDesignSystem.getSpaceXL(context),
+                        ),
+                        sliver: SliverToBoxAdapter(
+                          child: _buildFinishedCard(context, finishedClassroom),
+                        ),
+                      )
+                    else
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: AppDesignSystem.getSpaceXL(context),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            ],
-          );
-        }
-
-        // Vista con resultados
-        return CustomScrollView(
-          slivers: [
-            _buildSliverSearchBar(context),
-            _buildSliverFiltersAndView(context),
-            _buildSliverStatistics(context, allClassrooms, filteredClassrooms),
-            _viewMode == ViewMode.grid
-                ? _buildSliverGridView(context, filteredClassrooms)
-                : _buildSliverListView(context, filteredClassrooms),
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildSliverSearchBar(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Container(
-        padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceMD),
-        color: AppDesignSystem.surfaceColor,
-        child: TextField(
-          controller: _searchController,
-          onChanged: (value) {
-            // Cancelar el timer anterior si existe
-            _debounceTimer?.cancel();
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
 
-            // Crear nuevo timer de 300ms
-            _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-              setState(() {
-                _searchQuery = value;
-              });
-            });
-          },
-          decoration: InputDecoration(
-            hintText: 'Buscar por nombre, grado o sección...',
-            hintStyle: AppDesignSystem.bodyMedium(
-              context,
-            ).copyWith(color: AppDesignSystem.textDisabled),
-            prefixIcon: Icon(
-              Icons.search,
-              color: AppDesignSystem.textSecondary,
-            ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _searchController.clear();
-                      _debounceTimer?.cancel();
-                      setState(() {
-                        _searchQuery = '';
-                      });
-                    },
-                    color: AppDesignSystem.textSecondary,
-                  )
-                : null,
-            filled: true,
-            fillColor: AppDesignSystem.backgroundLight,
-            border: OutlineInputBorder(
-              borderRadius: AppDesignSystem.borderRadiusMD,
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: AppDesignSystem.borderRadiusMD,
-              borderSide: BorderSide(
-                color: AppDesignSystem.borderColor,
-                width: 1,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: AppDesignSystem.borderRadiusMD,
-              borderSide: BorderSide(
-                color: AppDesignSystem.primaryColor,
-                width: 2,
-              ),
-            ),
-            contentPadding: AppDesignSystem.paddingSymmetric(
-              context,
-              horizontal: AppDesignSystem.spaceMD,
-              vertical: AppDesignSystem.spaceSM,
-            ),
-          ),
+    if (_currentUser == null) {
+      return Scaffold(
+        body: ErrorStateWidget(
+          message:
+              'Usuario no autenticado. Por favor inicia sesión nuevamente.',
+          icon: Icons.person_off,
+          onRetry: () => Navigator.of(context).pushReplacementNamed('/login'),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildSliverFiltersAndView(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Container(
-        padding: AppDesignSystem.paddingSymmetric(
-          context,
-          horizontal: AppDesignSystem.spaceMD,
-          vertical: AppDesignSystem.spaceSM,
-        ),
-        color: AppDesignSystem.surfaceColor,
-        child: Row(
-          children: [
-            Expanded(child: _buildFilterChips(context)),
-            SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-            _buildViewToggle(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSliverStatistics(
-    BuildContext context,
-    List<ClassroomModel> allClassrooms,
-    List<ClassroomModel> filteredClassrooms,
-  ) {
-    final activeCount = allClassrooms.where((c) => c.isActive).length;
-    final inactiveCount = allClassrooms.length - activeCount;
-    final totalCapacity = allClassrooms.fold<int>(
-      0,
-      (sum, classroom) => sum + classroom.capacity,
-    );
-
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceMD),
-        padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceMD),
-        decoration: BoxDecoration(
-          color: AppDesignSystem.surfaceColor,
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          boxShadow: [AppDesignSystem.getShadowSM()],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.bar_chart,
-                  color: AppDesignSystem.primaryColor,
-                  size: AppDesignSystem.spacing(context, 20),
-                ),
-                SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-                Text(
-                  'Estadísticas',
-                  style: AppDesignSystem.titleMedium(context),
-                ),
-              ],
-            ),
-            SizedBox(height: AppDesignSystem.getSpaceMD(context)),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    icon: Icons.class_,
-                    label: 'Total',
-                    value: '${allClassrooms.length}',
-                    color: AppDesignSystem.primaryColor,
-                  ),
-                ),
-                SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    icon: Icons.check_circle,
-                    label: 'Activas',
-                    value: '$activeCount',
-                    color: AppDesignSystem.successColor,
-                  ),
-                ),
-                SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    icon: Icons.cancel,
-                    label: 'Inactivas',
-                    value: '$inactiveCount',
-                    color: AppDesignSystem.errorColor,
-                  ),
-                ),
-                SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    icon: Icons.groups,
-                    label: 'Capacidad',
-                    value: '$totalCapacity',
-                    color: AppDesignSystem.infoColor,
-                  ),
-                ),
-              ],
-            ),
-            if (filteredClassrooms.length != allClassrooms.length) ...[
-              SizedBox(height: AppDesignSystem.getSpaceSM(context)),
-              Container(
-                padding: AppDesignSystem.paddingSymmetric(
-                  context,
-                  horizontal: AppDesignSystem.spaceSM,
-                  vertical: AppDesignSystem.spaceXS,
-                ),
-                decoration: BoxDecoration(
-                  color: AppDesignSystem.infoColor.withValues(alpha: 0.1),
-                  borderRadius: AppDesignSystem.borderRadiusSM,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.filter_alt,
-                      size: AppDesignSystem.spacing(context, 14),
-                      color: AppDesignSystem.infoColor,
-                    ),
-                    SizedBox(width: AppDesignSystem.getSpaceXS(context)),
-                    Text(
-                      'Mostrando ${filteredClassrooms.length} de ${allClassrooms.length} aulas',
-                      style: AppDesignSystem.labelMedium(
-                        context,
-                      ).copyWith(color: AppDesignSystem.infoColor),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceSM),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: AppDesignSystem.borderRadiusSM,
-        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: AppDesignSystem.spacing(context, 20)),
-          SizedBox(height: AppDesignSystem.getSpaceXS(context)),
-          Text(
-            value,
-            style: AppDesignSystem.headlineMedium(
-              context,
-            ).copyWith(color: color, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            label,
-            style: AppDesignSystem.labelMedium(context).copyWith(color: color),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSliverGridView(
-    BuildContext context,
-    List<ClassroomModel> classrooms,
-  ) {
-    final crossAxisCount = AppDesignSystem.getCrossAxisCount(context);
-
-    return SliverPadding(
-      padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceMD),
-      sliver: SliverGrid(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: AppDesignSystem.getChildAspectRatio(context),
-          crossAxisSpacing: AppDesignSystem.getSpaceMD(context),
-          mainAxisSpacing: AppDesignSystem.getSpaceMD(context),
-        ),
-        delegate: SliverChildBuilderDelegate((context, index) {
-          final classroom = classrooms[index];
-          return ClassroomCard(
-            classroom: classroom,
-            onTap: () => _openClassroomDetail(classroom),
-            compact: false,
-            showScheduleInfo: true,
-          );
-        }, childCount: classrooms.length),
-      ),
-    );
-  }
-
-  Widget _buildSliverListView(
-    BuildContext context,
-    List<ClassroomModel> classrooms,
-  ) {
-    return SliverPadding(
-      padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceMD),
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate((context, index) {
-          final classroom = classrooms[index];
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: index < classrooms.length - 1
-                  ? AppDesignSystem.getSpaceSM(context)
-                  : 0,
-            ),
-            child: ClassroomCard(
-              classroom: classroom,
-              onTap: () => _openClassroomDetail(classroom),
-              compact: true,
-              showScheduleInfo: false,
-            ),
-          );
-        }, childCount: classrooms.length),
-      ),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F6F6),
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('Centro de Aulas'),
+              backgroundColor: _brandBlue,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            )
+          : null,
+      body: SafeArea(child: _buildClassroomsList(context)),
     );
   }
 }

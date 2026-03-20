@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'dart:async';
+import 'dart:ui';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/attendance_provider.dart';
@@ -9,39 +11,35 @@ import 'services/attendance_repository.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/modern_dashboard_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('FlutterError capturado: ${details.exceptionAsString()}');
+      if (details.stack != null) {
+        debugPrint(details.stack.toString());
+      }
+    };
 
-  // Precalentar shaders para evitar jank en la primera animación
-  await _warmUpShaders();
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('Error no manejado (PlatformDispatcher): $error');
+      debugPrint(stack.toString());
+      return true;
+    };
 
-  runApp(const MyApp());
-}
-
-/// Precalienta shaders comunes para evitar lag en primeras animaciones
-Future<void> _warmUpShaders() async {
-  try {
-    final PipelineOwner pipelineOwner = PipelineOwner();
-    final RenderView renderView = RenderView(
-      configuration: ViewConfiguration.fromView(
-        WidgetsBinding.instance.platformDispatcher.views.first,
-      ),
-      view: WidgetsBinding.instance.platformDispatcher.views.first,
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
     );
-    pipelineOwner.rootNode = renderView;
-    renderView.prepareInitialFrame();
 
-    // Simular frame para warm-up
-    pipelineOwner.flushLayout();
-    pipelineOwner.flushCompositingBits();
-    pipelineOwner.flushPaint();
-  } catch (e) {
-    // Ignorar errores en warm-up (no es crítico)
-    debugPrint('Shader warm-up skipped: $e');
-  }
+    await initializeDateFormatting('es', null);
+
+    runApp(const MyApp());
+  }, (error, stack) {
+    debugPrint('Error no manejado (Zone): $error');
+    debugPrint(stack.toString());
+  });
 }
 
 class MyApp extends StatelessWidget {

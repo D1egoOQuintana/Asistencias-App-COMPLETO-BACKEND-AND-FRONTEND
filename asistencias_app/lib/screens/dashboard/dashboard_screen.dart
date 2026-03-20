@@ -5,6 +5,7 @@ import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../themes/app_themes.dart';
 import '../admin/teachers/teachers_management_screen.dart' as teachers;
+import '../teacher/reports/teacher_reports_screen.dart';
 
 /// Dashboard principal con sidebar responsive
 class DashboardScreen extends StatefulWidget {
@@ -174,9 +175,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           icon: Icons.qr_code_scanner,
         ),
         const AdminMenuItem(
-          title: 'Historial',
-          route: '/history',
-          icon: Icons.history,
+          title: 'Reportes Profesionales',
+          route: '/professional-reports',
+          icon: Icons.assessment,
         ),
       ]);
     }
@@ -201,8 +202,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return const MyStudentsScreen();
       case '/attendance':
         return const TakeAttendanceScreen();
-      case '/history':
-        return const AttendanceHistoryScreen();
+      case '/professional-reports':
+        return const TeacherReportsScreen();
       default:
         return const HomeScreen();
     }
@@ -424,11 +425,4 @@ class TakeAttendanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Center(child: Text('Tomar Asistencia - Próximamente'));
-}
-
-class AttendanceHistoryScreen extends StatelessWidget {
-  const AttendanceHistoryScreen({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const Center(child: Text('Historial - Próximamente'));
 }

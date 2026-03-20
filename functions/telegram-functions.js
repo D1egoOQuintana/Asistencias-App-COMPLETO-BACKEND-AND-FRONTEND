@@ -79,25 +79,103 @@ const handleTelegramWebhook = onRequest(async (request, response) => {
     if (body.message) {
       const chatId = body.message.chat.id;
       const text = body.message.text;
+      const contact = body.message.contact;
       
+      // Comando /start - Mostrar opciones de vinculación
       if (text === '/start') {
         const welcomeMessage = `¡Hola! 👋
 
 Soy el bot de notificaciones de asistencia del colegio.
 
-Su *Chat ID* es: \`${chatId}\`
+Para recibir notificaciones de asistencia de su hijo(a), tiene 2 opciones:
 
-Por favor, proporcione este código al administrador del sistema para vincular las notificaciones de asistencia de su hijo(a) con este chat.
+*Opción 1 - Vinculación Automática:*
+Presione el botón "📱 Compartir mi número" para vincular automáticamente su cuenta.
 
-Una vez configurado, recibirá notificaciones automáticas cuando su hijo(a) registre asistencia.
+*Opción 2 - Vinculación Manual:*
+Su Chat ID es: \`${chatId}\`
+Proporcione este código al administrador del colegio.
 
 ¡Gracias! 📚`;
 
+        // Crear teclado con botón para compartir número
         await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
           chat_id: chatId,
           text: welcomeMessage,
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          reply_markup: {
+            keyboard: [
+              [{
+                text: '📱 Compartir mi número de teléfono',
+                request_contact: true
+              }]
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: true
+          }
         });
+      }
+      
+      // El usuario compartió su número de teléfono
+      if (contact) {
+        const phoneNumber = contact.phone_number;
+        
+        // Buscar estudiante por número de teléfono del padre
+        const studentsQuery = await admin.firestore()
+          .collection('students')
+          .where('parentPhone', '==', phoneNumber)
+          .get();
+        
+        if (studentsQuery.empty) {
+          // No se encontró estudiante con ese número
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `❌ No se encontró ningún estudiante con el número de teléfono *${phoneNumber}*.
+
+Por favor, asegúrese de que:
+1. El número esté registrado en el sistema del colegio
+2. El número incluya el código de país (+51 para Perú)
+
+Si el problema persiste, contacte al administrador con su Chat ID: \`${chatId}\``,
+            parse_mode: 'Markdown'
+          });
+        } else {
+          // Vincular el chatId a todos los hijos con ese número
+          const batch = admin.firestore().batch();
+          const studentNames = [];
+          
+          studentsQuery.docs.forEach(doc => {
+            const student = doc.data();
+            studentNames.push(`${student.firstName} ${student.lastName}`);
+            batch.update(doc.ref, {
+              parentTelegramChatId: chatId.toString(),
+              parentTelegramLinkedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          });
+          
+          await batch.commit();
+          
+          const studentList = studentNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
+          
+          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: `✅ *¡Vinculación exitosa!*
+
+Su cuenta de Telegram ha sido vinculada con:
+
+${studentList}
+
+A partir de ahora recibirá notificaciones automáticas cuando sus hijo(a)s registren asistencia.
+
+¡Gracias! 📚`,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              remove_keyboard: true
+            }
+          });
+          
+          console.log(`✅ Vinculación exitosa para ${phoneNumber} con ${studentNames.length} estudiante(s)`);
+        }
       }
     }
     
