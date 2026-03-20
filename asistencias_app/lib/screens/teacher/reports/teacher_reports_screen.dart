@@ -2133,8 +2133,9 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                                 SizedBox(
                                   width: 118,
                                   child: OutlinedButton.icon(
-                                    onPressed:
-                                        isLoading ? null : _generatePDFReport,
+                                    onPressed: isLoading
+                                        ? null
+                                        : _generatePDFReport,
                                     icon: const Icon(
                                       Icons.picture_as_pdf_outlined,
                                       size: 18,

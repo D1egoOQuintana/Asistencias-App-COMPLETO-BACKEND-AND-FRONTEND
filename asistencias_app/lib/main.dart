@@ -12,34 +12,37 @@ import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/modern_dashboard_screen.dart';
 
 void main() {
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      debugPrint('FlutterError capturado: ${details.exceptionAsString()}');
-      if (details.stack != null) {
-        debugPrint(details.stack.toString());
-      }
-    };
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        debugPrint('FlutterError capturado: ${details.exceptionAsString()}');
+        if (details.stack != null) {
+          debugPrint(details.stack.toString());
+        }
+      };
 
-    PlatformDispatcher.instance.onError = (error, stack) {
-      debugPrint('Error no manejado (PlatformDispatcher): $error');
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('Error no manejado (PlatformDispatcher): $error');
+        debugPrint(stack.toString());
+        return true;
+      };
+
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+
+      await initializeDateFormatting('es', null);
+
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      debugPrint('Error no manejado (Zone): $error');
       debugPrint(stack.toString());
-      return true;
-    };
-
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-
-    await initializeDateFormatting('es', null);
-
-    runApp(const MyApp());
-  }, (error, stack) {
-    debugPrint('Error no manejado (Zone): $error');
-    debugPrint(stack.toString());
-  });
+    },
+  );
 }
 
 class MyApp extends StatelessWidget {

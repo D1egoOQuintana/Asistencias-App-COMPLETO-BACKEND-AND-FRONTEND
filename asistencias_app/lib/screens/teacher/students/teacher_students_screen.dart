@@ -118,7 +118,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                   : Column(
                       children: [
                         _buildModernSelectedClassHeader(_selectedClassroom!),
-                        Expanded(child: _buildStudentsList(_selectedClassroom!)),
+                        Expanded(
+                          child: _buildStudentsList(_selectedClassroom!),
+                        ),
                       ],
                     ),
             ),
@@ -268,7 +270,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                             child: DropdownButton<String>(
                               value: classroom.id,
                               isExpanded: true,
-                              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                              icon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                              ),
                               items: classrooms
                                   .where((c) => c.id != null)
                                   .map(
@@ -515,7 +519,10 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFDCFCE7),
                       borderRadius: BorderRadius.circular(999),
@@ -577,8 +584,13 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
         final isCompact = screenSize.width < 380;
 
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 20,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 520,
@@ -592,9 +604,13 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE0E7FF),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
                     border: Border(
-                      bottom: BorderSide(color: const Color(0xFF1976D2).withValues(alpha: 0.15)),
+                      bottom: BorderSide(
+                        color: const Color(0xFF1976D2).withValues(alpha: 0.15),
+                      ),
                     ),
                   ),
                   child: Row(
@@ -606,7 +622,10 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                           color: const Color(0xFF1976D2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.edit_rounded, color: Colors.white),
+                        child: const Icon(
+                          Icons.edit_rounded,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -663,7 +682,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                             decoration: BoxDecoration(
                               color: const Color(0xFFF8FAFC),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -684,7 +705,8 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         '${student.firstName} ${student.lastName}',
@@ -714,7 +736,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                             controller: nameCtrl,
                             decoration: InputDecoration(
                               labelText: 'Nombre *',
-                              prefixIcon: const Icon(Icons.person_outline_rounded),
+                              prefixIcon: const Icon(
+                                Icons.person_outline_rounded,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -797,7 +821,8 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                   final name = nameCtrl.text.trim();
                                   final lastName = lastNameCtrl.text.trim();
                                   final dni = dniCtrl.text.trim();
-                                  final parentPhone = parentPhoneCtrl.text.trim();
+                                  final parentPhone = parentPhoneCtrl.text
+                                      .trim();
 
                                   Navigator.of(ctx).pop();
 
@@ -816,7 +841,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                             SizedBox(
                                               width: 22,
                                               height: 22,
-                                              child: CircularProgressIndicator(strokeWidth: 2.6),
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.6,
+                                              ),
                                             ),
                                             SizedBox(width: 14),
                                             Text('Actualizando estudiante...'),
@@ -826,24 +853,31 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                     ),
                                   );
 
-                                  final success = await StudentService.updateStudent(
-                                    studentId: student.id!,
-                                    firstName: name,
-                                    lastName: lastName,
-                                    dni: dni,
-                                    classroomId: student.classroomId,
-                                    parentEmail: null,
-                                    parentPhone: parentPhone.isEmpty ? null : parentPhone,
-                                  );
+                                  final success =
+                                      await StudentService.updateStudent(
+                                        studentId: student.id!,
+                                        firstName: name,
+                                        lastName: lastName,
+                                        dni: dni,
+                                        classroomId: student.classroomId,
+                                        parentEmail: null,
+                                        parentPhone: parentPhone.isEmpty
+                                            ? null
+                                            : parentPhone,
+                                      );
 
                                   if (mounted) {
                                     Navigator.of(safeContext).pop();
-                                    ScaffoldMessenger.of(safeContext).showSnackBar(
+                                    ScaffoldMessenger.of(
+                                      safeContext,
+                                    ).showSnackBar(
                                       SnackBar(
                                         content: Row(
                                           children: [
                                             Icon(
-                                              success ? Icons.check_circle : Icons.error,
+                                              success
+                                                  ? Icons.check_circle
+                                                  : Icons.error,
                                               color: Colors.white,
                                             ),
                                             const SizedBox(width: 12),
@@ -854,10 +888,14 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                             ),
                                           ],
                                         ),
-                                        backgroundColor: success ? Colors.green : Colors.red,
+                                        backgroundColor: success
+                                            ? Colors.green
+                                            : Colors.red,
                                         behavior: SnackBarBehavior.floating,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                       ),
                                     );
@@ -904,7 +942,8 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                   final name = nameCtrl.text.trim();
                                   final lastName = lastNameCtrl.text.trim();
                                   final dni = dniCtrl.text.trim();
-                                  final parentPhone = parentPhoneCtrl.text.trim();
+                                  final parentPhone = parentPhoneCtrl.text
+                                      .trim();
 
                                   Navigator.of(ctx).pop();
 
@@ -923,7 +962,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                             SizedBox(
                                               width: 22,
                                               height: 22,
-                                              child: CircularProgressIndicator(strokeWidth: 2.6),
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.6,
+                                              ),
                                             ),
                                             SizedBox(width: 14),
                                             Text('Actualizando estudiante...'),
@@ -933,24 +974,31 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                     ),
                                   );
 
-                                  final success = await StudentService.updateStudent(
-                                    studentId: student.id!,
-                                    firstName: name,
-                                    lastName: lastName,
-                                    dni: dni,
-                                    classroomId: student.classroomId,
-                                    parentEmail: null,
-                                    parentPhone: parentPhone.isEmpty ? null : parentPhone,
-                                  );
+                                  final success =
+                                      await StudentService.updateStudent(
+                                        studentId: student.id!,
+                                        firstName: name,
+                                        lastName: lastName,
+                                        dni: dni,
+                                        classroomId: student.classroomId,
+                                        parentEmail: null,
+                                        parentPhone: parentPhone.isEmpty
+                                            ? null
+                                            : parentPhone,
+                                      );
 
                                   if (mounted) {
                                     Navigator.of(safeContext).pop();
-                                    ScaffoldMessenger.of(safeContext).showSnackBar(
+                                    ScaffoldMessenger.of(
+                                      safeContext,
+                                    ).showSnackBar(
                                       SnackBar(
                                         content: Row(
                                           children: [
                                             Icon(
-                                              success ? Icons.check_circle : Icons.error,
+                                              success
+                                                  ? Icons.check_circle
+                                                  : Icons.error,
                                               color: Colors.white,
                                             ),
                                             const SizedBox(width: 12),
@@ -961,10 +1009,14 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                             ),
                                           ],
                                         ),
-                                        backgroundColor: success ? Colors.green : Colors.red,
+                                        backgroundColor: success
+                                            ? Colors.green
+                                            : Colors.red,
                                         behavior: SnackBarBehavior.floating,
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                       ),
                                     );
@@ -1065,8 +1117,13 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
         }
 
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 20,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: 520,
@@ -1305,8 +1362,12 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
   /// Construir card de aula con diseño moderno
   Widget _buildClassroomCard(ClassroomModel classroom) {
-    final enrolled = classroom.capacity > 1 ? classroom.capacity - 1 : classroom.capacity;
-    final progress = classroom.capacity == 0 ? 0.0 : (enrolled / classroom.capacity).clamp(0.0, 1.0);
+    final enrolled = classroom.capacity > 1
+        ? classroom.capacity - 1
+        : classroom.capacity;
+    final progress = classroom.capacity == 0
+        ? 0.0
+        : (enrolled / classroom.capacity).clamp(0.0, 1.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1355,7 +1416,11 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          const Icon(Icons.group, size: 16, color: Color(0xFF64748B)),
+                          const Icon(
+                            Icons.group,
+                            size: 16,
+                            color: Color(0xFF64748B),
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             '$enrolled / ${classroom.capacity} estudiantes',
@@ -1481,10 +1546,15 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                   ),
                   onChanged: (value) {
                     _debounceTimer?.cancel();
-                    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-                      if (!mounted) return;
-                      setState(() => _searchQuery = value.toLowerCase().trim());
-                    });
+                    _debounceTimer = Timer(
+                      const Duration(milliseconds: 300),
+                      () {
+                        if (!mounted) return;
+                        setState(
+                          () => _searchQuery = value.toLowerCase().trim(),
+                        );
+                      },
+                    );
                   },
                 ),
               ),
@@ -1501,10 +1571,22 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                     value: _sortOrder,
                     icon: const Icon(Icons.sort),
                     items: const [
-                      DropdownMenuItem(value: SortOrder.aToZ, child: Text('A-Z')),
-                      DropdownMenuItem(value: SortOrder.zToA, child: Text('Z-A')),
-                      DropdownMenuItem(value: SortOrder.newest, child: Text('Nuevos')),
-                      DropdownMenuItem(value: SortOrder.oldest, child: Text('Antiguos')),
+                      DropdownMenuItem(
+                        value: SortOrder.aToZ,
+                        child: Text('A-Z'),
+                      ),
+                      DropdownMenuItem(
+                        value: SortOrder.zToA,
+                        child: Text('Z-A'),
+                      ),
+                      DropdownMenuItem(
+                        value: SortOrder.newest,
+                        child: Text('Nuevos'),
+                      ),
+                      DropdownMenuItem(
+                        value: SortOrder.oldest,
+                        child: Text('Antiguos'),
+                      ),
                     ],
                     onChanged: (newValue) {
                       if (newValue != null) {
@@ -1521,12 +1603,17 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
             child: StreamBuilder<QuerySnapshot>(
               stream: StudentService.getStudentsByClassroom(classroom.id!),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting && _cachedStudents == null) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    _cachedStudents == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error al cargar estudiantes: ${snapshot.error}'));
+                  return Center(
+                    child: Text(
+                      'Error al cargar estudiantes: ${snapshot.error}',
+                    ),
+                  );
                 }
 
                 if (snapshot.hasData) {
@@ -1540,7 +1627,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                   }
                 }
 
-                var students = List<StudentModel>.from(_cachedStudents ?? const []);
+                var students = List<StudentModel>.from(
+                  _cachedStudents ?? const [],
+                );
 
                 switch (_statusFilter) {
                   case StudentFilter.active:
@@ -1555,7 +1644,8 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
                 if (_searchQuery.isNotEmpty) {
                   students = students.where((student) {
-                    final fullName = '${student.firstName} ${student.lastName}'.toLowerCase();
+                    final fullName = '${student.firstName} ${student.lastName}'
+                        .toLowerCase();
                     return fullName.contains(_searchQuery);
                   }).toList();
                 }
@@ -1626,7 +1716,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
             backgroundColor: const Color(0xFFE0E7FF),
             side: BorderSide.none,
             minimumSize: Size.fromHeight(actionHeight),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
 
@@ -1638,7 +1730,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
             backgroundColor: const Color(0xFF1976D2),
             foregroundColor: Colors.white,
             minimumSize: Size.fromHeight(actionHeight),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
 
@@ -2093,7 +2187,6 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
       _showStudentQR(student);
     });
   }
-
 }
 
 class _StudentQRDialog extends StatelessWidget {
@@ -2345,7 +2438,10 @@ class _StudentQRDialog extends StatelessWidget {
                     ),
                     child: IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.close_rounded, size: isSmallScreen ? 18 : 20),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: isSmallScreen ? 18 : 20,
+                      ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -2395,7 +2491,10 @@ class _StudentQRDialog extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF22C55E),
                                     borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(color: Colors.white, width: 1.5),
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 1.5,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2426,7 +2525,9 @@ class _StudentQRDialog extends StatelessWidget {
                                       ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFE1E3E4),
-                                        borderRadius: BorderRadius.circular(999),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
                                       ),
                                       child: const Text(
                                         'DNI',
@@ -2481,8 +2582,14 @@ class _StudentQRDialog extends StatelessWidget {
                               data: jsonEncode(qrData),
                               version: QrVersions.auto,
                               size: isSmallScreen
-                                  ? (screenSize.width * 0.42).clamp(140.0, 185.0)
-                                  : (screenSize.width * 0.45).clamp(180.0, 240.0),
+                                  ? (screenSize.width * 0.42).clamp(
+                                      140.0,
+                                      185.0,
+                                    )
+                                  : (screenSize.width * 0.45).clamp(
+                                      180.0,
+                                      240.0,
+                                    ),
                               backgroundColor: Colors.white,
                               foregroundColor: Colors.black,
                             ),
