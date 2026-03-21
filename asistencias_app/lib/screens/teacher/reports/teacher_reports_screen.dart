@@ -117,23 +117,40 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
       print('DEBUG: Usuario autenticado: ${user.uid}');
 
-      final querySnapshot = await _firestore
+        // Usar una sola condición para evitar fallos por índices compuestos
+        // y filtrar estado en memoria para mayor tolerancia a datos legacy.
+        final querySnapshot = await _firestore
           .collection('classrooms')
           .where('teacherUid', isEqualTo: user.uid)
-          .where('isActive', isEqualTo: true)
           .get();
 
       print('DEBUG: Documentos encontrados: ${querySnapshot.docs.length}');
 
       if (!mounted) return;
       setState(() {
-        classrooms = querySnapshot.docs
+        final allClassrooms = querySnapshot.docs
             .map((doc) => {'id': doc.id, ...doc.data()})
             .toList();
+
+        final activeClassrooms = allClassrooms
+            .where((classroom) => classroom['isActive'] != false)
+            .toList();
+
+        // Si por calidad de datos no hay isActive válido, mostrar todas.
+        classrooms = activeClassrooms.isNotEmpty
+            ? activeClassrooms
+            : allClassrooms;
 
         print('DEBUG: Aulas cargadas: ${classrooms.length}');
         if (classrooms.isNotEmpty) {
           print('DEBUG: Primera aula: ${classrooms[0]}');
+        }
+
+        final selectedStillExists = selectedClassroomId != null &&
+            classrooms.any((classroom) => classroom['id'] == selectedClassroomId);
+
+        if (!selectedStillExists) {
+          selectedClassroomId = null;
         }
 
         if (classrooms.isNotEmpty && selectedClassroomId == null) {
@@ -372,15 +389,29 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       final records = attendanceSnapshot.docs
           .map((doc) {
             final data = doc.data();
-            final timestamp = (data['timestamp'] as Timestamp).toDate();
+            
+            // Safe timestamp parsing
+            DateTime timestampDate;
+            if (data['timestamp'] != null) {
+              if (data['timestamp'] is Timestamp) {
+                timestampDate = (data['timestamp'] as Timestamp).toDate();
+              } else if (data['timestamp'] is String) {
+                timestampDate = DateTime.tryParse(data['timestamp'].toString()) ?? DateTime.now();
+              } else {
+                timestampDate = DateTime.now();
+              }
+            } else {
+              timestampDate = DateTime.now();
+            }
+
             return {
               'id': doc.id,
               'studentId': data['studentId'],
               'studentName': data['studentName'] ?? 'N/A',
               'status': data['status'],
-              'date': DateFormat('dd/MM/yyyy').format(timestamp),
-              'time': DateFormat('HH:mm').format(timestamp),
-              'timestamp': timestamp,
+              'date': DateFormat('dd/MM/yyyy').format(timestampDate),
+              'time': DateFormat('HH:mm').format(timestampDate),
+              'timestamp': timestampDate,
               'method': data['method'] ?? 'manual',
               'notes': data['notes'] ?? '',
             };
@@ -1059,14 +1090,24 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      print('SnackBar omitido (sin ScaffoldMessenger): $message');
+      return;
+    }
+    messenger.showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
   void _showSuccess(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      print('SnackBar omitido (sin ScaffoldMessenger): $message');
+      return;
+    }
+    messenger.showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
   }
@@ -1449,228 +1490,11 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     final chronic = (overviewData?['chronicAbsenteeism'] as int?) ?? 0;
     final sessions = (overviewData?['totalSessions'] as int?) ?? 0;
     final trend =
-        (overviewData?['trend'] as List?)?.cast<double>() ?? [0, 0, 0, 0];
+        (overviewData?['trend'] as List?)?.cast<double>() ?? [0.0, 0.0, 0.0, 0.0];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 980;
-
-                  final classSelector = DropdownButtonFormField<String>(
-                    value: selectedClassroomId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Grupo / Aula',
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                    ),
-                    items: classrooms
-                        .map(
-                          (classroom) => DropdownMenuItem<String>(
-                            value: classroom['id'] as String,
-                            child: Text(
-                              (classroom['name'] ?? 'Sin nombre').toString(),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: classrooms.isEmpty
-                        ? null
-                        : (value) {
-                            _setStateIfMounted(() {
-                              selectedClassroomId = value;
-                              aiInsights = null;
-                            });
-                          },
-                  );
-
-                  final dateSelector = InkWell(
-                    onTap: _pickDateRange,
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'Rango de fechas',
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        prefixIcon: const Icon(Icons.calendar_today_outlined),
-                      ),
-                      child: Text(
-                        '${DateFormat('MMM d, yyyy').format(startDate)} - ${DateFormat('MMM d, yyyy').format(endDate)}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  );
-
-                  final applyButton = ElevatedButton(
-                    onPressed: isApplyingFilters ? null : _applyFilters,
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.resolveWith((
-                        states,
-                      ) {
-                        if (states.contains(WidgetState.disabled)) {
-                          return primaryColor.withValues(alpha: 0.55);
-                        }
-                        if (states.contains(WidgetState.pressed)) {
-                          return const Color(0xFF111A66);
-                        }
-                        if (states.contains(WidgetState.hovered)) {
-                          return const Color(0xFF202B9A);
-                        }
-                        return primaryColor;
-                      }),
-                      foregroundColor: const WidgetStatePropertyAll(
-                        Colors.white,
-                      ),
-                      elevation: const WidgetStatePropertyAll(0),
-                      padding: const WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      ),
-                      shape: WidgetStatePropertyAll(
-                        RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    child: isApplyingFilters
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Aplicar filtros',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                  );
-
-                  if (isWide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(child: classSelector),
-                        const SizedBox(width: 12),
-                        Expanded(child: dateSelector),
-                        const SizedBox(width: 12),
-                        SizedBox(width: 180, child: applyButton),
-                      ],
-                    );
-                  }
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      classSelector,
-                      const SizedBox(height: 12),
-                      dateSelector,
-                      const SizedBox(height: 12),
-                      SizedBox(width: double.infinity, child: applyButton),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 14),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 700;
-
-                  final monthField = DropdownButtonFormField<int>(
-                    value: selectedMonth,
-                    decoration: InputDecoration(
-                      labelText: 'Mes de exportación',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      isDense: true,
-                    ),
-                    items: [
-                      for (int i = 1; i <= 12; i++)
-                        DropdownMenuItem(
-                          value: i,
-                          child: Text(
-                            DateFormat('MMMM', 'es').format(DateTime(2024, i)),
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        _setStateIfMounted(() => selectedMonth = value);
-                      }
-                    },
-                  );
-
-                  final yearField = DropdownButtonFormField<int>(
-                    value: selectedYear,
-                    decoration: InputDecoration(
-                      labelText: 'Año',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      isDense: true,
-                    ),
-                    items: [
-                      for (
-                        int year = DateTime.now().year - 2;
-                        year <= DateTime.now().year;
-                        year++
-                      )
-                        DropdownMenuItem(value: year, child: Text('$year')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        _setStateIfMounted(() => selectedYear = value);
-                      }
-                    },
-                  );
-
-                  if (isWide) {
-                    return Row(
-                      children: [
-                        Expanded(flex: 2, child: monthField),
-                        const SizedBox(width: 12),
-                        Expanded(child: yearField),
-                      ],
-                    );
-                  }
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      monthField,
-                      const SizedBox(height: 12),
-                      yearField,
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
         if (overviewError != null)
           Container(
             width: double.infinity,
@@ -1689,8 +1513,8 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             ),
           ),
         if (overviewError != null) const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
+        Builder(
+          builder: (context) {
             final cards = [
               _buildStatCard(
                 title: 'Asistencia promedio',
@@ -1711,7 +1535,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             ];
 
             const gap = 12.0;
-            final width = constraints.maxWidth;
+            final width = MediaQuery.of(context).size.width - 32; // 32 is padding
             final cardWidth = (width - (gap * 2)) / 3;
             final needsScroll = cardWidth < 220;
 
@@ -1738,95 +1562,97 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         ),
         const SizedBox(height: 16),
         _buildTrendChart(trend),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [Color(0xFF0F172A), Color(0xFF1F2A8A)],
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0x22FFFFFF)),
-          ),
-          child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            runAlignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              const SizedBox(
-                width: 380,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Generar análisis predictivo',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      'La IA analiza patrones de asistencia para identificar estudiantes que requieren intervención temprana.',
-                      style: TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        height: 1.4,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: isLoading ? null : _generateAIInsights,
-                icon: isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.auto_awesome),
-                label: Text(
-                  isLoading ? loadingMessage : 'Generar análisis con IA',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.disabled)) {
-                      return const Color(0xFFA855F7).withValues(alpha: 0.55);
-                    }
-                    if (states.contains(WidgetState.pressed)) {
-                      return const Color(0xFF7E22CE);
-                    }
-                    if (states.contains(WidgetState.hovered)) {
-                      return const Color(0xFF9333EA);
-                    }
-                    return const Color(0xFFA855F7);
-                  }),
-                  foregroundColor: const WidgetStatePropertyAll(Colors.white),
-                  elevation: const WidgetStatePropertyAll(0),
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  ),
-                  shape: WidgetStatePropertyAll(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildPredictiveAnalysisCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xFF0F172A), Color(0xFF1F2A8A)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x22FFFFFF)),
+      ),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        runAlignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          const SizedBox(
+            width: 380,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Generar análisis predictivo',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'La IA analiza patrones de asistencia para identificar estudiantes que requieren intervención temprana.',
+                  style: TextStyle(
+                    color: Color(0xFFCBD5E1),
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: isLoading ? null : _generateAIInsights,
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.auto_awesome),
+            label: Text(
+              isLoading ? loadingMessage : 'Generar análisis con IA',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.disabled)) {
+                  return const Color(0xFFA855F7).withValues(alpha: 0.55);
+                }
+                if (states.contains(WidgetState.pressed)) {
+                  return const Color(0xFF7E22CE);
+                }
+                if (states.contains(WidgetState.hovered)) {
+                  return const Color(0xFF9333EA);
+                }
+                return const Color(0xFFA855F7);
+              }),
+              foregroundColor: const WidgetStatePropertyAll(Colors.white),
+              elevation: const WidgetStatePropertyAll(0),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              ),
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1933,57 +1759,202 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   Widget _buildInsightsContent() {
     return Column(
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: ElevatedButton.icon(
-            onPressed: isLoading ? null : _generateAIInsights,
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.auto_awesome),
-            label: Text(
-              isLoading ? loadingMessage : 'Generar análisis con IA',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return const Color(0xFFA855F7).withValues(alpha: 0.55);
-                }
-                if (states.contains(WidgetState.pressed)) {
-                  return const Color(0xFF7E22CE);
-                }
-                if (states.contains(WidgetState.hovered)) {
-                  return const Color(0xFF9333EA);
-                }
-                return const Color(0xFFA855F7);
-              }),
-              foregroundColor: const WidgetStatePropertyAll(Colors.white),
-              elevation: const WidgetStatePropertyAll(0),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(vertical: 14),
-              ),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-        ),
+        _buildPredictiveAnalysisCard(),
         const SizedBox(height: 14),
         _buildAIInsightsPanel(),
       ],
+    );
+  }
+
+  Widget _buildExportActionsSection() {
+    Widget buildExportCard({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required Color iconColor,
+      required Color iconBackground,
+      required VoidCallback onTap,
+    }) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isLoading ? null : onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A0F172A),
+                  blurRadius: 12,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: iconBackground,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.download_rounded,
+                  color: Color(0xFF94A3B8),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+
+        final monthField = DropdownButtonFormField<int>(
+          value: selectedMonth,
+          decoration: InputDecoration(
+            labelText: 'Mes de exportación',
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            isDense: true,
+          ),
+          items: [
+            for (int i = 1; i <= 12; i++)
+              DropdownMenuItem(
+                value: i,
+                child: Text(DateFormat('MMMM', 'es').format(DateTime(2024, i))),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              _setStateIfMounted(() => selectedMonth = value);
+            }
+          },
+        );
+
+        final yearField = DropdownButtonFormField<int>(
+          value: selectedYear,
+          decoration: InputDecoration(
+            labelText: 'Año de exportación',
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            isDense: true,
+          ),
+          items: [
+            for (
+              int year = DateTime.now().year - 2;
+              year <= DateTime.now().year;
+              year++
+            )
+              DropdownMenuItem(value: year, child: Text('$year')),
+          ],
+          onChanged: (value) {
+            if (value != null) {
+              _setStateIfMounted(() => selectedYear = value);
+            }
+          },
+        );
+
+        final pdfCard = buildExportCard(
+          icon: Icons.picture_as_pdf_rounded,
+          title: 'PDF Reporte',
+          subtitle: 'Descargar resumen visual',
+          iconColor: const Color(0xFFB91C1C),
+          iconBackground: const Color(0xFFFEE2E2),
+          onTap: _generatePDFReport,
+        );
+
+        final excelCard = buildExportCard(
+          icon: Icons.table_chart_rounded,
+          title: 'Excel Reporte',
+          subtitle: 'Descargar datos de asistencia',
+          iconColor: const Color(0xFF1D4ED8),
+          iconBackground: const Color(0xFFDBEAFE),
+          onTap: _generateExcelReport,
+        );
+
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              monthField,
+              const SizedBox(height: 10),
+              yearField,
+              const SizedBox(height: 12),
+              pdfCard,
+              const SizedBox(height: 10),
+              excelCard,
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(flex: 2, child: monthField),
+                const SizedBox(width: 10),
+                Expanded(child: yearField),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: pdfCard),
+                const SizedBox(width: 10),
+                Expanded(child: excelCard),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2011,10 +1982,10 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 radius: 22,
                 backgroundColor: _brandBlue,
                 backgroundImage:
-                    (_auth.currentUser?.photoURL?.isNotEmpty ?? false)
+                    (_auth.currentUser?.photoURL?.isNotEmpty ?? false) && Uri.tryParse(_auth.currentUser!.photoURL!)?.hasAbsolutePath == true
                     ? NetworkImage(_auth.currentUser!.photoURL!)
                     : null,
-                child: (_auth.currentUser?.photoURL?.isNotEmpty ?? false)
+                child: ((_auth.currentUser?.photoURL?.isNotEmpty ?? false) && Uri.tryParse(_auth.currentUser!.photoURL!)?.hasAbsolutePath == true)
                     ? null
                     : const Icon(
                         Icons.school_rounded,
@@ -2108,8 +2079,11 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
           children: [
             _buildTopGlassBar(context, 'Centro de reportes'),
             Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(bottom: 10),
               color: Colors.white,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(height: AppDesignSystem.getSpaceMD(context)),
                   _buildDashboardHeader(
@@ -2117,87 +2091,11 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                     title: 'Reportes',
                     subtitle: 'Gestión de asistencia y recursos curriculares.',
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isNarrow = constraints.maxWidth < 760;
-
-                            final exportButtons = Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                SizedBox(
-                                  width: 118,
-                                  child: OutlinedButton.icon(
-                                    onPressed: isLoading
-                                        ? null
-                                        : _generatePDFReport,
-                                    icon: const Icon(
-                                      Icons.picture_as_pdf_outlined,
-                                      size: 18,
-                                    ),
-                                    label: const Text('PDF'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF0F172A),
-                                      side: const BorderSide(
-                                        color: Color(0xFFE2E8F0),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 10,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 118,
-                                  child: OutlinedButton.icon(
-                                    onPressed: isLoading
-                                        ? null
-                                        : _generateExcelReport,
-                                    icon: const Icon(
-                                      Icons.table_view_outlined,
-                                      size: 18,
-                                    ),
-                                    label: const Text('Excel'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF0F172A),
-                                      side: const BorderSide(
-                                        color: Color(0xFFE2E8F0),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 10,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-
-                            if (isNarrow) {
-                              return Align(
-                                alignment: Alignment.centerRight,
-                                child: exportButtons,
-                              );
-                            }
-
-                            return Row(
-                              children: [const Spacer(), exportButtons],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 2),
                         Row(
                           children: [
                             _buildTabButton(
@@ -2258,9 +2156,24 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                       );
                     }
 
-                    if (activeTab == 0) return _buildOverviewContent();
-                    if (activeTab == 1) return _buildDetailedListContent();
-                    return _buildInsightsContent();
+                    final tabContent = activeTab == 0
+                        ? _buildOverviewContent()
+                        : activeTab == 1
+                        ? _buildDetailedListContent()
+                        : _buildInsightsContent();
+
+                    final showExportSection = activeTab == 0;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showExportSection) ...[
+                          _buildExportActionsSection(),
+                          const SizedBox(height: 14),
+                        ],
+                        tabContent,
+                      ],
+                    );
                   },
                 ),
               ),
