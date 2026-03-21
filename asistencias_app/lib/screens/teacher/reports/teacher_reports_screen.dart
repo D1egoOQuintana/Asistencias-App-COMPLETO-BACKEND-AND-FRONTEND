@@ -117,9 +117,9 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
       print('DEBUG: Usuario autenticado: ${user.uid}');
 
-        // Usar una sola condición para evitar fallos por índices compuestos
-        // y filtrar estado en memoria para mayor tolerancia a datos legacy.
-        final querySnapshot = await _firestore
+      // Usar una sola condición para evitar fallos por índices compuestos
+      // y filtrar estado en memoria para mayor tolerancia a datos legacy.
+      final querySnapshot = await _firestore
           .collection('classrooms')
           .where('teacherUid', isEqualTo: user.uid)
           .get();
@@ -146,8 +146,11 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
           print('DEBUG: Primera aula: ${classrooms[0]}');
         }
 
-        final selectedStillExists = selectedClassroomId != null &&
-            classrooms.any((classroom) => classroom['id'] == selectedClassroomId);
+        final selectedStillExists =
+            selectedClassroomId != null &&
+            classrooms.any(
+              (classroom) => classroom['id'] == selectedClassroomId,
+            );
 
         if (!selectedStillExists) {
           selectedClassroomId = null;
@@ -389,14 +392,16 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       final records = attendanceSnapshot.docs
           .map((doc) {
             final data = doc.data();
-            
+
             // Safe timestamp parsing
             DateTime timestampDate;
             if (data['timestamp'] != null) {
               if (data['timestamp'] is Timestamp) {
                 timestampDate = (data['timestamp'] as Timestamp).toDate();
               } else if (data['timestamp'] is String) {
-                timestampDate = DateTime.tryParse(data['timestamp'].toString()) ?? DateTime.now();
+                timestampDate =
+                    DateTime.tryParse(data['timestamp'].toString()) ??
+                    DateTime.now();
               } else {
                 timestampDate = DateTime.now();
               }
@@ -1490,7 +1495,8 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     final chronic = (overviewData?['chronicAbsenteeism'] as int?) ?? 0;
     final sessions = (overviewData?['totalSessions'] as int?) ?? 0;
     final trend =
-        (overviewData?['trend'] as List?)?.cast<double>() ?? [0.0, 0.0, 0.0, 0.0];
+        (overviewData?['trend'] as List?)?.cast<double>() ??
+        [0.0, 0.0, 0.0, 0.0];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1535,7 +1541,8 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             ];
 
             const gap = 12.0;
-            final width = MediaQuery.of(context).size.width - 32; // 32 is padding
+            final width =
+                MediaQuery.of(context).size.width - 32; // 32 is padding
             final cardWidth = (width - (gap * 2)) / 3;
             final needsScroll = cardWidth < 220;
 
@@ -1645,9 +1652,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               ),
               shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
@@ -1982,10 +1987,19 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 radius: 22,
                 backgroundColor: _brandBlue,
                 backgroundImage:
-                    (_auth.currentUser?.photoURL?.isNotEmpty ?? false) && Uri.tryParse(_auth.currentUser!.photoURL!)?.hasAbsolutePath == true
+                    (_auth.currentUser?.photoURL?.isNotEmpty ?? false) &&
+                        Uri.tryParse(
+                              _auth.currentUser!.photoURL!,
+                            )?.hasAbsolutePath ==
+                            true
                     ? NetworkImage(_auth.currentUser!.photoURL!)
                     : null,
-                child: ((_auth.currentUser?.photoURL?.isNotEmpty ?? false) && Uri.tryParse(_auth.currentUser!.photoURL!)?.hasAbsolutePath == true)
+                child:
+                    ((_auth.currentUser?.photoURL?.isNotEmpty ?? false) &&
+                        Uri.tryParse(
+                              _auth.currentUser!.photoURL!,
+                            )?.hasAbsolutePath ==
+                            true)
                     ? null
                     : const Icon(
                         Icons.school_rounded,
