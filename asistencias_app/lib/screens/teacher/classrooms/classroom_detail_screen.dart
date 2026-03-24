@@ -18,450 +18,323 @@ class ClassroomDetailScreen extends StatefulWidget {
 
   @override
   State<ClassroomDetailScreen> createState() => _ClassroomDetailScreenState();
+}
+
+class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
+  final Map<String, String> _weekDays = const {
+    'monday': 'Lunes',
+    'tuesday': 'Martes',
+    'wednesday': 'Miércoles',
+    'thursday': 'Jueves',
+    'friday': 'Viernes',
+    'saturday': 'Sábado',
+    'sunday': 'Domingo',
+  };
+
+  DateTime _selectedDay = DateTime.now();
+  DateTime _focusedDay = DateTime.now();
+  String? _sessionId;
+  bool _attendanceActive = false;
+  bool _isScanning = false;
+  bool _isShowingResult = false;
+  List<StudentModel> _students = [];
+  Map<String, dynamic> _attendanceData = {};
+  ClassroomModel? _classroomOverride;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStudents();
+    _loadAttendanceForDay(_selectedDay);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final classroomId = widget.classroom.id;
+
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaler: TextScaler.linear(1.0),
-      ),
+      data: MediaQuery.of(
+        context,
+      ).copyWith(textScaler: const TextScaler.linear(1.0)),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
         appBar: AppBar(
-          title: const Text('Registro Digital'),
-          backgroundColor: Colors.transparent,
-          foregroundColor: const Color(0xFF000D33),
-          elevation: 0,
+          title: Text(widget.classroom.fullName),
           actions: [
             IconButton(
-              icon: const Icon(Icons.notifications_none_rounded),
-              onPressed: () {},
-              tooltip: 'Notificaciones',
+              tooltip: 'Configurar horarios',
+              icon: const Icon(Icons.schedule),
+              onPressed: _showScheduleSettings,
             ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _showScheduleSettings,
-          backgroundColor: const Color(0xFF002060),
-          foregroundColor: Colors.white,
-          child: const Icon(Icons.add),
-        ),
-        body: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('classrooms')
-              .doc(widget.classroom.id)
-              .snapshots(),
+        body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: classroomId == null
+              ? null
+              : FirebaseFirestore.instance
+                    .collection('classrooms')
+                    .doc(classroomId)
+                    .snapshots(),
           builder: (context, snapshot) {
-            final classroom =
-                _classroomOverride ??
-                ((snapshot.data != null && snapshot.data!.exists)
-                    ? ClassroomModel.fromFirestore(snapshot.data!)
-                    : widget.classroom);
+            final classroom = (snapshot.data != null && snapshot.data!.exists)
+                ? ClassroomModel.fromFirestore(snapshot.data!)
+                : (_classroomOverride ?? widget.classroom);
 
-            final orderedDays = const [
-              'monday',
-              'tuesday',
-              'wednesday',
-              'thursday',
-              'friday',
-            ];
-
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Mis Horarios',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF000D33),
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Gestión de jornada laboral y periodos de gracia.',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF2C4383),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.maxWidth;
-                      final columns = width >= 1040
-                          ? 3
-                          : width >= 680
-                          ? 2
-                          : 1;
-                      final gap = 12.0;
-                      final itemWidth = (width - (gap * (columns - 1))) / columns;
-
-                      final cards = orderedDays.map((dayKey) {
-                        final schedule = classroom.schedule?[dayKey];
-                        final dayName = _weekDays[dayKey] ?? dayKey;
-                        final isConfigured =
-                            schedule != null &&
-                            schedule.startTime.isNotEmpty &&
-                            schedule.endTime.isNotEmpty;
-
-                        if (isConfigured) {
-                          return SizedBox(
-                            width: itemWidth,
-                            child: Container(
-                              constraints: const BoxConstraints(minHeight: 200),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x0D000000),
-                                    blurRadius: 12,
-                                    offset: Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Stack(
-                                children: [
-                                  Positioned(
-                                    left: 0,
-                                    top: 0,
-                                    bottom: 0,
-                                    child: Container(
-                                      width: 5,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF1DA056),
-                                        borderRadius: BorderRadius.only(
-                                          topLeft: Radius.circular(14),
-                                          bottomLeft: Radius.circular(14),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      14,
-                                      14,
-                                      14,
-                                      12,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                dayName,
-                                                style: const TextStyle(
-                                                  fontSize: 22,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: Color(0xFF000D33),
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 4,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF83FBA5),
-                                                borderRadius:
-                                                    BorderRadius.circular(999),
-                                              ),
-                                              child: const Text(
-                                                'Activo',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Color(0xFF005227),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.schedule,
-                                              size: 18,
-                                              color: Color(0xFF2C4383),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              '${schedule.startTime} - ${schedule.endTime}',
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w700,
-                                                color: Color(0xFF000D33),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFF3F4F5),
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.verified_user_outlined,
-                                                size: 16,
-                                                color: Color(0xFF1DA056),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  'Puntual hasta: ${schedule.maxLateTime}',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Color(0xFF444650),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: ElevatedButton.icon(
-                                            onPressed: _showScheduleSettings,
-                                            icon: const Icon(Icons.edit),
-                                            label: const Text('Editar horario'),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  const Color(0xFFE7E8E9),
-                                              foregroundColor:
-                                                  const Color(0xFF000D33),
-                                              elevation: 0,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 12,
-                                                  ),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _buildScheduleList(classroom),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _attendanceActive
+                                ? _stopAttendanceSession
+                                : _startAttendanceSession,
+                            icon: Icon(
+                              _attendanceActive
+                                  ? Icons.stop_circle
+                                  : Icons.play_circle,
                             ),
-                          );
-                        }
-
-                        return SizedBox(
-                          width: itemWidth,
-                          child: Container(
-                            constraints: const BoxConstraints(minHeight: 200),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF3F4F5),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFFC5C6D2),
-                                style: BorderStyle.solid,
-                                width: 1.2,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        dayName,
-                                        style: const TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w800,
-                                          color: Color(0xFF50606F),
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE1E3E4),
-                                        borderRadius: BorderRadius.circular(999),
-                                      ),
-                                      child: const Text(
-                                        'Pendiente',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF50606F),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Spacer(),
-                                const Center(
-                                  child: Column(
-                                    children: [
-                                      Icon(
-                                        Icons.event_busy_outlined,
-                                        size: 42,
-                                        color: Color(0xFF757681),
-                                      ),
-                                      SizedBox(height: 8),
-                                      Text(
-                                        'Sin horario configurado',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Color(0xFF556474),
-                                          fontStyle: FontStyle.italic,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Spacer(),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _showScheduleSettings,
-                                    icon: const Icon(Icons.add_circle_outline),
-                                    label: const Text('Configurar'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF002060),
-                                      side: const BorderSide(
-                                        color: Color(0x33002060),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            label: Text(
+                              _attendanceActive
+                                  ? 'Finalizar sesión'
+                                  : 'Iniciar sesión',
                             ),
                           ),
-                        );
-                      }).toList();
-
-                      return Wrap(
-                        spacing: gap,
-                        runSpacing: gap,
-                        children: cards,
-                      );
-                    },
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              _showEditAttendanceDialog(_selectedDay),
+                          icon: const Icon(Icons.edit_calendar),
+                          label: const Text('Editar'),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: TableCalendar(
+                      firstDay: DateTime(2020),
+                      lastDay: DateTime(2100),
+                      focusedDay: _focusedDay,
+                      selectedDayPredicate: (day) =>
+                          isSameDay(day, _selectedDay),
+                      onDaySelected: (selectedDay, focusedDay) {
+                        setState(() {
+                          _selectedDay = selectedDay;
+                          _focusedDay = focusedDay;
+                        });
+                        _loadAttendanceForDay(selectedDay);
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Escáner QR',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    height: 260,
+                    child: MobileScanner(
+                      onDetect: (capture) {
+                        final barcode = capture.barcodes.firstOrNull;
+                        final raw = barcode?.rawValue;
+                        if (raw != null && raw.isNotEmpty) {
+                          _processQRCode(raw);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Resumen del día',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                _buildDailyAttendanceList(classroom.id),
+              ],
             );
           },
         ),
       ),
     );
-                                              a.createdAt,
-                                            );
+  }
 
-                                          case SortOrder.oldest:
-                                            return a.createdAt.compareTo(
-                                              b.createdAt,
-                                            );
-                                        }
-                                      });
+  Widget _buildDailyAttendanceList(String? classroomId) {
+    if (classroomId == null || classroomId.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: Text('No se pudo cargar el salón.'),
+        ),
+      );
+    }
 
-                                      // Si no hay estudiantes después del filtrado, mostrar mensaje
-                                      if (filteredStudents.isEmpty &&
-                                          _calendarSearchQuery.isNotEmpty) {
-                                        return Padding(
-                                          padding: const EdgeInsets.all(16.0),
-                                          child: Column(
-                                            children: [
-                                              const Icon(
-                                                Icons.search_off,
-                                                size: 48,
-                                                color: Colors.grey,
-                                              ),
-                                              const SizedBox(height: 8),
-                                              Text(
-                                                'No se encontraron estudiantes\ncon "$_calendarSearchQuery"',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  color: Colors.grey,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }
+    final dateKey = _formatDate(_selectedDay);
 
-                                      return ListView.builder(
-                                        shrinkWrap: true,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        itemCount: filteredStudents.length,
-                                        itemBuilder: (context, index) {
-                                          final st = filteredStudents[index];
-                                          final stStatus =
-                                              dayMap[st.id] ?? 'absent';
-                                          return ListTile(
-                                            dense: true,
-                                            leading: statusIcon(stStatus),
-                                            title: Text(
-                                              '${st.firstName} ${st.lastName}',
-                                            ),
-                                            trailing: Text(
-                                              stStatus == 'present' ||
-                                                      stStatus == 'presente'
-                                                  ? 'Presente'
-                                                  : stStatus == 'late' ||
-                                                        stStatus == 'tarde'
-                                                  ? 'Tarde'
-                                                  : 'Faltó',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ); // Cierre del Column que comienza en línea 941
-                            },
-                          ),
-                        ],
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('attendance')
+          .where('classroomId', isEqualTo: classroomId)
+          .where('date', isEqualTo: dateKey)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        final dayMap = <String, String>{};
+        for (final doc in docs) {
+          final data = doc.data();
+          final sid = (data['studentId'] ?? '').toString();
+          final status = (data['status'] ?? 'absent').toString();
+          if (sid.isNotEmpty) {
+            dayMap[sid] = status;
+          }
+        }
+
+        final total = _students.length;
+        final present = dayMap.values
+            .where((v) => v == 'present' || v == 'presente')
+            .length;
+        final late = dayMap.values
+            .where((v) => v == 'late' || v == 'tarde')
+            .length;
+        final absent = total - present - late;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        'Presentes',
+                        '$present',
+                        Icons.check_circle,
+                        Colors.green,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Tardanzas',
+                        '$late',
+                        Icons.access_time,
+                        Colors.orange,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Faltas',
+                        '$absent',
+                        Icons.cancel,
+                        Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_students.isEmpty)
+                  const ListTile(
+                    title: Text('No hay estudiantes en este salón.'),
+                  )
+                else
+                  ..._students.map((st) {
+                    final sid = st.id ?? '';
+                    final status = dayMap[sid] ?? 'absent';
+                    final label = status == 'present'
+                        ? 'Presente'
+                        : status == 'late'
+                        ? 'Tarde'
+                        : 'Faltó';
+                    final color = status == 'present'
+                        ? Colors.green
+                        : status == 'late'
+                        ? Colors.orange
+                        : Colors.red;
+
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(Icons.person, color: color),
+                      title: Text('${st.firstName} ${st.lastName}'),
+                      trailing: Text(
+                        label,
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  ClassSchedule? _getScheduleFor(DateTime now, ClassroomModel classroom) {
+    final scheduleMap = classroom.schedule;
+    if (scheduleMap == null || scheduleMap.isEmpty) {
+      return null;
+    }
+    final weekdayKey = switch (now.weekday) {
+      DateTime.monday => 'monday',
+      DateTime.tuesday => 'tuesday',
+      DateTime.wednesday => 'wednesday',
+      DateTime.thursday => 'thursday',
+      DateTime.friday => 'friday',
+      DateTime.saturday => 'saturday',
+      DateTime.sunday => 'sunday',
+      _ => '',
+    };
+    return scheduleMap[weekdayKey];
+  }
+
+  DateTime _combine(DateTime date, String hhmm) {
+    final parts = hhmm.split(':');
+    final hour = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0;
+    final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
+  bool _isWithinClassTime(DateTime now, ClassSchedule schedule) {
+    final start = _combine(now, schedule.startTime);
+    final end = _combine(now, schedule.endTime);
+    return !now.isBefore(start) && !now.isAfter(end);
+  }
+
+  bool _isAfterEndTime(DateTime now, ClassSchedule schedule) {
+    final end = _combine(now, schedule.endTime);
+    return now.isAfter(end);
   }
 
   Widget _buildScheduleList(ClassroomModel classroom) {
