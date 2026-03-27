@@ -449,10 +449,10 @@ function createApp(): express.Application {
     try {
       const { email, password, fullName, matricula, grado, seccion, telefono } = req.body;
 
-      if (!email || !password || !fullName || !matricula) {
+      if (!email || !password || !fullName) {
         return res.status(400).json({
           success: false,
-          message: 'Email, contraseña, nombre completo y matrícula son requeridos'
+          message: 'Email, contraseña y nombre completo son requeridos'
         });
       }
 
@@ -473,7 +473,7 @@ function createApp(): express.Application {
         fullName: fullName,
         role: 'alumno',
         isActive: true,
-        matricula: matricula,
+        matricula: matricula || '',
         grado: grado || '',
         seccion: seccion || '',
         telefono: telefono || '',
@@ -503,7 +503,7 @@ function createApp(): express.Application {
             email: email,
             fullName: fullName,
             role: 'alumno',
-            matricula: matricula,
+            matricula: matricula || '',
             grado: grado,
             seccion: seccion,
             isActive: true

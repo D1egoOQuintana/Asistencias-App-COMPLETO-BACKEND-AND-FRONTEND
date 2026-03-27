@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +14,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:flutter/services.dart';
 import '../../../theme/app_design_system.dart';
+import '../../../widgets/common/app_feedback_dialog.dart';
 
 class _LegendDot extends StatelessWidget {
   final Color color;
@@ -55,6 +57,7 @@ class TeacherReportsScreen extends StatefulWidget {
 
 class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   static const Color _brandBlue = Color(0xFF1976D2);
+  static const Color _secondary = Color(0xFF1976D2);
   static const Color _outline = Color(0xFF5F6470);
   static const Color _outlineVariant = Color(0xFFC5C6D2);
 
@@ -1095,26 +1098,12 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) {
-      print('SnackBar omitido (sin ScaffoldMessenger): $message');
-      return;
-    }
-    messenger.showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+    AppFeedbackDialog.error(context, title: 'Error', message: message);
   }
 
   void _showSuccess(String message) {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) {
-      print('SnackBar omitido (sin ScaffoldMessenger): $message');
-      return;
-    }
-    messenger.showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
+    AppFeedbackDialog.success(context, title: 'Completado', message: message);
   }
 
   Future<void> _pickDateRange() async {
@@ -1489,21 +1478,19 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   }
 
   Widget _buildOverviewContent() {
-    final primaryColor = const Color(0xFF1976D2);
-
     final avg = (overviewData?['averageAttendance'] as num?)?.toDouble() ?? 0;
     final chronic = (overviewData?['chronicAbsenteeism'] as int?) ?? 0;
-    final sessions = (overviewData?['totalSessions'] as int?) ?? 0;
     final trend =
         (overviewData?['trend'] as List?)?.cast<double>() ??
         [0.0, 0.0, 0.0, 0.0];
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (overviewError != null)
           Container(
             width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: const Color(0xFFFEF2F2),
@@ -1518,58 +1505,416 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
               ),
             ),
           ),
-        if (overviewError != null) const SizedBox(height: 16),
-        Builder(
-          builder: (context) {
+
+        // Selector de mes
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFE6E8E9),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x0A000000),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_month,
+                          color: Color(0xFF1976D2),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${DateFormat('MMMM', 'es').format(DateTime(selectedYear, selectedMonth))} $selectedYear'
+                              .toUpperCase(),
+                          style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF000D33),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: _showMonthYearPicker,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.expand_more,
+                        color: Color(0xFF757681),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 600;
+            final cardSpacing = isCompact ? 16.0 : 32.0;
+
             final cards = [
-              _buildStatCard(
-                title: 'Asistencia promedio',
-                value: '${avg.toStringAsFixed(1)}%',
-                trend: '2.4%',
-                progress: avg / 100,
+              _buildHtmlStatCard(
+                title: 'ASISTENCIA PROMEDIO',
+                value: '${avg.toStringAsFixed(0)}%',
+                icon: Icons.verified,
+                subtitleWidget: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.trending_up,
+                      color: Color(0xFF1976D2),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+2.4%',
+                      style: GoogleFonts.workSans(
+                        color: const Color(0xFF1976D2),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              _buildStatCard(
-                title: 'Ausentismo crónico',
+              _buildHtmlStatCard(
+                title: 'AUSENTISMO CRÓNICO',
                 value: '$chronic',
-                helper: 'Estudiantes en zona de riesgo',
-              ),
-              _buildStatCard(
-                title: 'Total de sesiones',
-                value: '$sessions',
-                helper: 'En el período seleccionado',
+                icon: Icons.assignment_turned_in,
+                subtitleWidget: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD8E2FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'META CUMPLIDA',
+                    style: GoogleFonts.workSans(
+                      color: const Color(0xFF004493),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ),
             ];
 
-            const gap = 12.0;
-            final width =
-                MediaQuery.of(context).size.width - 32; // 32 is padding
-            final cardWidth = (width - (gap * 2)) / 3;
-            final needsScroll = cardWidth < 220;
-
-            final statsRow = Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(width: needsScroll ? 220 : cardWidth, child: cards[0]),
-                const SizedBox(width: gap),
-                SizedBox(width: needsScroll ? 220 : cardWidth, child: cards[1]),
-                const SizedBox(width: gap),
-                SizedBox(width: needsScroll ? 220 : cardWidth, child: cards[2]),
-              ],
-            );
-
-            if (!needsScroll) {
-              return statsRow;
+            if (isCompact) {
+              return Column(
+                children: [
+                  cards[0],
+                  SizedBox(height: cardSpacing),
+                  cards[1],
+                ],
+              );
             }
 
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: statsRow,
+            return Row(
+              children: [
+                Expanded(child: cards[0]),
+                SizedBox(width: cardSpacing),
+                Expanded(child: cards[1]),
+              ],
             );
           },
         ),
-        const SizedBox(height: 16),
-        _buildTrendChart(trend),
+        const SizedBox(height: 32),
+        _buildHtmlTrendChart(trend),
+        const SizedBox(height: 24),
       ],
+    );
+  }
+
+  void _showMonthYearPicker() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        int tempMonth = selectedMonth;
+        int tempYear = selectedYear;
+        return AlertDialog(
+          title: const Text('Mes del Reporte'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                value: tempMonth,
+                decoration: const InputDecoration(labelText: 'Mes'),
+                items: List.generate(
+                  12,
+                  (i) => DropdownMenuItem(
+                    value: i + 1,
+                    child: Text(
+                      DateFormat('MMMM', 'es').format(DateTime(2024, i + 1)),
+                    ),
+                  ),
+                ),
+                onChanged: (val) {
+                  if (val != null) tempMonth = val;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: tempYear,
+                decoration: const InputDecoration(labelText: 'Año'),
+                items: List.generate(5, (i) {
+                  final y = DateTime.now().year - 2 + i;
+                  return DropdownMenuItem(value: y, child: Text('$y'));
+                }),
+                onChanged: (val) {
+                  if (val != null) tempYear = val;
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _setStateIfMounted(() {
+                  selectedMonth = tempMonth;
+                  selectedYear = tempYear;
+
+                  startDate = DateTime(tempYear, tempMonth, 1, 0, 0, 0);
+                  final nextMonth = tempMonth < 12 ? tempMonth + 1 : 1;
+                  final nextYear = tempMonth < 12 ? tempYear : tempYear + 1;
+                  endDate = DateTime(
+                    nextYear,
+                    nextMonth,
+                    1,
+                  ).subtract(const Duration(milliseconds: 1));
+                });
+                _applyFilters();
+              },
+              child: const Text('Aceptar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHtmlStatCard({
+    required String title,
+    required String value,
+    required Widget subtitleWidget,
+    required IconData icon,
+  }) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000D33),
+            blurRadius: 48,
+            offset: Offset(0, 24),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.workSans(
+                  color: const Color(0xFF444650),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    value,
+                    style: GoogleFonts.manrope(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF000D33),
+                      height: 1.0,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  subtitleWidget,
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            right: -24,
+            bottom: -24,
+            child: Icon(
+              icon,
+              size: 120,
+              color: Colors.black.withValues(alpha: 0.03),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHtmlTrendChart(List<double> trend) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000D33),
+            blurRadius: 48,
+            offset: Offset(0, 24),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Tendencia Mensual',
+                style: GoogleFonts.manrope(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF000D33),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1976D2),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Asistencia',
+                    style: GoogleFonts.workSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF444650),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 40),
+          SizedBox(
+            height: 250,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(4, (index) {
+                final isHighlight = index == 2;
+                final val = trend[index] <= 0
+                    ? 0.08
+                    : (trend[index] / 100).clamp(0.08, 1.0);
+
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE6E8E9),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Stack(
+                                alignment: Alignment.bottomCenter,
+                                children: [
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 500),
+                                    height: 200 * val,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1976D2),
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(999),
+                                        bottom: Radius.circular(999),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'SEM 0${index + 1}',
+                          style: GoogleFonts.workSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isHighlight
+                                ? const Color(0xFF000D33)
+                                : const Color(0xFF757681),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1772,191 +2117,151 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   }
 
   Widget _buildExportActionsSection() {
-    Widget buildExportCard({
-      required IconData icon,
-      required String title,
-      required String subtitle,
-      required Color iconColor,
-      required Color iconBackground,
-      required VoidCallback onTap,
-    }) {
-      return Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isLoading ? null : onTap,
-          borderRadius: BorderRadius.circular(14),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 600;
+        final buttonSpacing = 24.0;
+
+        final pdfBtn = InkWell(
+          onTap: isLoading ? null : _generatePDFReport,
+          borderRadius: BorderRadius.circular(16),
           child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              color: const Color(0xFF1976D2), // primary / brandBlue
+              borderRadius: BorderRadius.circular(16),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x0A0F172A),
-                  blurRadius: 12,
-                  offset: Offset(0, 2),
+                  color: Color(0x33000D33),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
             child: Row(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
-                    color: iconBackground,
-                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
-                  child: Icon(icon, color: iconColor, size: 24),
+                  child: const Icon(
+                    Icons.picture_as_pdf,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
-                        style: const TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
+                        'Descargar PDF',
+                        style: GoogleFonts.manrope(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
-                        subtitle,
-                        style: const TextStyle(
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                        'Formato oficial firmado',
+                        style: GoogleFonts.workSans(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 14,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.download_rounded,
-                  color: Color(0xFF94A3B8),
-                  size: 20,
-                ),
+                const Icon(Icons.arrow_forward, color: Colors.white),
               ],
             ),
           ),
-        ),
-      );
-    }
+        );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
-
-        final monthField = DropdownButtonFormField<int>(
-          value: selectedMonth,
-          decoration: InputDecoration(
-            labelText: 'Mes de exportación',
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-            isDense: true,
-          ),
-          items: [
-            for (int i = 1; i <= 12; i++)
-              DropdownMenuItem(
-                value: i,
-                child: Text(DateFormat('MMMM', 'es').format(DateTime(2024, i))),
+        final excelBtn = InkWell(
+          onTap: isLoading ? null : _generateExcelReport,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFC5C6D2).withValues(alpha: 0.3),
               ),
-          ],
-          onChanged: (value) {
-            if (value != null) {
-              _setStateIfMounted(() => selectedMonth = value);
-            }
-          },
-        );
-
-        final yearField = DropdownButtonFormField<int>(
-          value: selectedYear,
-          decoration: InputDecoration(
-            labelText: 'Año de exportación',
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000D33),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
             ),
-            isDense: true,
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFD8E2FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.table_chart,
+                    color: Color(0xFF1976D2),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Exportar Excel',
+                        style: GoogleFonts.manrope(
+                          color: const Color(0xFF000D33),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Análisis de datos crudos',
+                        style: GoogleFonts.workSans(
+                          color: const Color(0xFF444650).withValues(alpha: 0.6),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward, color: Color(0xFF1976D2)),
+              ],
+            ),
           ),
-          items: [
-            for (
-              int year = DateTime.now().year - 2;
-              year <= DateTime.now().year;
-              year++
-            )
-              DropdownMenuItem(value: year, child: Text('$year')),
-          ],
-          onChanged: (value) {
-            if (value != null) {
-              _setStateIfMounted(() => selectedYear = value);
-            }
-          },
         );
 
-        final pdfCard = buildExportCard(
-          icon: Icons.picture_as_pdf_rounded,
-          title: 'PDF Reporte',
-          subtitle: 'Descargar resumen visual',
-          iconColor: const Color(0xFFB91C1C),
-          iconBackground: const Color(0xFFFEE2E2),
-          onTap: _generatePDFReport,
-        );
-
-        final excelCard = buildExportCard(
-          icon: Icons.table_chart_rounded,
-          title: 'Excel Reporte',
-          subtitle: 'Descargar datos de asistencia',
-          iconColor: const Color(0xFF1D4ED8),
-          iconBackground: const Color(0xFFDBEAFE),
-          onTap: _generateExcelReport,
-        );
-
-        if (compact) {
+        if (isCompact) {
           return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              monthField,
-              const SizedBox(height: 10),
-              yearField,
-              const SizedBox(height: 12),
-              pdfCard,
-              const SizedBox(height: 10),
-              excelCard,
+              pdfBtn,
+              SizedBox(height: buttonSpacing),
+              excelBtn,
             ],
           );
         }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Row(
           children: [
-            Row(
-              children: [
-                Expanded(flex: 2, child: monthField),
-                const SizedBox(width: 10),
-                Expanded(child: yearField),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: pdfCard),
-                const SizedBox(width: 10),
-                Expanded(child: excelCard),
-              ],
-            ),
+            Expanded(child: pdfBtn),
+            SizedBox(width: buttonSpacing),
+            Expanded(child: excelBtn),
           ],
         );
       },
@@ -2017,8 +2322,9 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                       'Asistencias',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppDesignSystem.titleLarge(context).copyWith(
+                      style: GoogleFonts.manrope(
                         color: _brandBlue,
+                        fontSize: 24,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.4,
                         height: 1,
@@ -2029,8 +2335,9 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppDesignSystem.bodySmall(context).copyWith(
+                      style: GoogleFonts.manrope(
                         color: _outline,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.1,
                       ),
@@ -2048,7 +2355,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   Widget _buildDashboardHeader(
     BuildContext context, {
     required String title,
-    required String subtitle,
+    required bool showLive,
   }) {
     return Padding(
       padding: AppDesignSystem.paddingSymmetric(
@@ -2058,25 +2365,65 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppDesignSystem.headlineLarge(context).copyWith(
-              color: _brandBlue,
-              fontSize: 40,
-              height: 0.95,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -1.4,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth;
+              final titleSize = maxWidth < 360
+                  ? 30.0
+                  : maxWidth < 420
+                  ? 34.0
+                  : 40.0;
+
+              return Text(
+                title,
+                softWrap: true,
+                style: GoogleFonts.manrope(
+                  color: _brandBlue,
+                  fontSize: titleSize,
+                  height: 1.05,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.9,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          if (showLive)
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _secondary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: _secondary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'En vivo ahora',
+                        style: GoogleFonts.manrope(
+                          color: _secondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-          SizedBox(height: AppDesignSystem.getSpaceSM(context)),
-          Text(
-            subtitle,
-            style: AppDesignSystem.bodyMedium(
-              context,
-            ).copyWith(color: _outline, fontWeight: FontWeight.w500),
-          ),
         ],
       ),
     );
@@ -2092,25 +2439,33 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         child: Column(
           children: [
             _buildTopGlassBar(context, 'Centro de reportes'),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(bottom: 10),
-              color: Colors.white,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: AppDesignSystem.getSpaceMD(context)),
-                  _buildDashboardHeader(
-                    context,
-                    title: 'Reportes',
-                    subtitle: 'Gestión de asistencia y recursos curriculares.',
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF2F4F5), Color(0xFFEDEFF2)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        Row(
+                ),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDashboardHeader(
+                        context,
+                        title: 'Gestión de reportes',
+                        showLive: false,
+                      ),
+                      const SizedBox(height: 18),
+                      Padding(
+                        padding: AppDesignSystem.paddingSymmetric(
+                          context,
+                          horizontal: AppDesignSystem.spaceMD,
+                        ),
+                        child: Row(
                           children: [
                             _buildTabButton(
                               label: 'Resumen',
@@ -2129,66 +2484,64 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-                child: Builder(
-                  builder: (_) {
-                    if (classrooms.isEmpty) {
-                      return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFFBEB),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFFDE68A)),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(
-                              Icons.warning_amber_rounded,
-                              color: Color(0xFFB45309),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'No hay aulas asignadas a este profesor.',
-                                style: TextStyle(
-                                  color: Color(0xFF92400E),
-                                  fontWeight: FontWeight.w700,
+                      ),
+                      const SizedBox(height: 16),
+                      Builder(
+                        builder: (_) {
+                          if (classrooms.isEmpty) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFFDE68A),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
+                              child: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    color: Color(0xFFB45309),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'No hay aulas asignadas a este profesor.',
+                                      style: TextStyle(
+                                        color: Color(0xFF92400E),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
 
-                    final tabContent = activeTab == 0
-                        ? _buildOverviewContent()
-                        : activeTab == 1
-                        ? _buildDetailedListContent()
-                        : _buildInsightsContent();
+                          final tabContent = activeTab == 0
+                              ? _buildOverviewContent()
+                              : activeTab == 1
+                              ? _buildDetailedListContent()
+                              : _buildInsightsContent();
 
-                    final showExportSection = activeTab == 0;
+                          final showExportSection = activeTab == 0;
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (showExportSection) ...[
-                          _buildExportActionsSection(),
-                          const SizedBox(height: 14),
-                        ],
-                        tabContent,
-                      ],
-                    );
-                  },
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (showExportSection) ...[
+                                _buildExportActionsSection(),
+                                const SizedBox(height: 14),
+                              ],
+                              tabContent,
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

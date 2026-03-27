@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/scheduler.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/attendance_provider.dart';
@@ -36,6 +38,12 @@ void main() {
 
       await initializeDateFormatting('es', null);
 
+      // Warm-up global para reducir jank inicial en primeras animaciones.
+      SchedulerBinding.instance.scheduleWarmUpFrame();
+
+      // Cache de imágenes más amplia para evitar stutter por recarga temprana.
+      PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
+
       runApp(const MyApp());
     },
     (error, stack) {
@@ -57,7 +65,7 @@ class MyApp extends StatelessWidget {
           create: (_) => AttendanceProvider(AttendanceRepository()),
         ),
       ],
-      child: MaterialApp(
+      child: GetMaterialApp(
         title: 'Asistencias Escolares',
         theme: ThemeData(
           useMaterial3: true,

@@ -5,6 +5,7 @@ import '../../../models/user_model.dart';
 import '../../../providers/auth_provider.dart' as AppAuthProvider;
 import '../../../themes/app_themes.dart';
 import '../../../services/admin_service_final.dart';
+import '../../../widgets/common/app_feedback_dialog.dart';
 
 /// Pantalla para gestión de docentes (solo admin)
 class TeachersManagementScreen extends StatefulWidget {
@@ -488,22 +489,26 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Docente creado'),
-            backgroundColor: (result['success'] == true)
-                ? Colors.green
-                : Colors.red,
-          ),
-        );
+        if (result['success'] == true) {
+          AppFeedbackDialog.success(
+            context,
+            title: 'Docente creado',
+            message: result['message'] ?? 'Docente creado correctamente',
+          );
+        } else {
+          AppFeedbackDialog.error(
+            context,
+            title: 'No se pudo crear',
+            message: result['message'] ?? 'Ocurrió un error al crear docente',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al crear docente: $e'),
-            backgroundColor: Colors.red,
-          ),
+        AppFeedbackDialog.error(
+          context,
+          title: 'Error al crear docente',
+          message: '$e',
         );
       }
     }
@@ -516,15 +521,16 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen>
           .doc(teacher.uid)
           .update({'fullName': newName});
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Docente actualizado correctamente')),
+      AppFeedbackDialog.success(
+        context,
+        title: 'Actualizado',
+        message: 'Docente actualizado correctamente',
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al actualizar docente: $e'),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedbackDialog.error(
+        context,
+        title: 'Error al actualizar',
+        message: '$e',
       );
     }
   }
@@ -536,20 +542,14 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen>
           .doc(teacher.uid)
           .update({'isActive': !teacher.isActive});
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      AppFeedbackDialog.success(
+        context,
+        title: 'Estado actualizado',
+        message:
             'Docente ${!teacher.isActive ? 'activado' : 'desactivado'} correctamente',
-          ),
-        ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al cambiar estado del docente: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppFeedbackDialog.error(context, title: 'Error de estado', message: '$e');
     }
   }
 
@@ -560,15 +560,16 @@ class _TeachersManagementScreenState extends State<TeachersManagementScreen>
           .doc(teacher.uid)
           .delete();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Docente eliminado correctamente')),
+      AppFeedbackDialog.success(
+        context,
+        title: 'Eliminado',
+        message: 'Docente eliminado correctamente',
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al eliminar docente: $e'),
-          backgroundColor: Colors.red,
-        ),
+      AppFeedbackDialog.error(
+        context,
+        title: 'Error al eliminar',
+        message: '$e',
       );
     }
   }

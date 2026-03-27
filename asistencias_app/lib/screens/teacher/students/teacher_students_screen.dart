@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
 import '../../../providers/auth_provider.dart';
@@ -11,6 +12,7 @@ import '../../../models/user_model.dart';
 import '../../../models/classroom_model.dart';
 import '../../../models/student_model.dart';
 import '../../../theme/app_design_system.dart';
+import 'teacher_create_student_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -102,29 +104,39 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F6F6),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: _selectedClassroom == null
-                  ? Column(
-                      children: [
-                        _buildModernStudentsHeader(),
-                        Expanded(child: _buildClassroomsList(currentUser.uid)),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _buildModernSelectedClassHeader(_selectedClassroom!),
-                        Expanded(
-                          child: _buildStudentsList(_selectedClassroom!),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
+    final baseTheme = Theme.of(context);
+    final manropeTheme = baseTheme.textTheme.apply(
+      fontFamily: GoogleFonts.manrope().fontFamily,
+    );
+
+    return Theme(
+      data: baseTheme.copyWith(textTheme: manropeTheme),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FA),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: _selectedClassroom == null
+                    ? Column(
+                        children: [
+                          _buildModernStudentsHeader(),
+                          Expanded(
+                            child: _buildClassroomsList(currentUser.uid),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          _buildModernSelectedClassHeader(_selectedClassroom!),
+                          Expanded(
+                            child: _buildStudentsList(_selectedClassroom!),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -137,7 +149,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTopGlassBar(context, authUser, 'Centro de alumnos'),
+        _buildTopGlassBar(context, authUser, 'Centro de Alumnos'),
         Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -147,11 +159,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(height: AppDesignSystem.getSpaceMD(context)),
-              _buildDashboardHeader(
-                context,
-                title: 'Alumnos',
-                subtitle: 'Gestión de estudiantes y asistencia curricular.',
-              ),
+              _buildDashboardHeader(context, title: 'Centro de Alumnos'),
               const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -178,8 +186,8 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                       Expanded(
                         child: Text(
                           classroomsCount <= 2
-                              ? 'Visualización directa de alumnos en Centro de Alumnos'
-                              : 'Selecciona un aula para ver sus estudiantes',
+                              ? 'Visualización directa de alumnos'
+                              : 'Selecciona un aula para abrir el roster',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -223,113 +231,114 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTopGlassBar(context, authUser, 'Centro de alumnos'),
+        _buildTopGlassBar(context, authUser, 'Centro de Alumnos'),
         Container(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.only(bottom: 14),
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: Color(0xFFF8F6F6),
             border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(height: AppDesignSystem.getSpaceMD(context)),
-              _buildDashboardHeader(
-                context,
-                title: 'Alumnos',
-                subtitle: 'Gestión de estudiantes y asistencia curricular.',
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  '${classroom.name} • ${classroom.grade}° ${classroom.section}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 20),
+                _buildDashboardHeader(context, title: 'Gestión de Alumnos'),
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    '${classroom.name} • ${classroom.grade}° ${classroom.section}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    if (classrooms.length > 1) ...[
-                      Expanded(
-                        child: Container(
-                          height: 42,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: classroom.id,
-                              isExpanded: true,
-                              icon: const Icon(
-                                Icons.keyboard_arrow_down_rounded,
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      if (classrooms.length > 1) ...[
+                        Expanded(
+                          child: Container(
+                            height: 42,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
                               ),
-                              items: classrooms
-                                  .where((c) => c.id != null)
-                                  .map(
-                                    (c) => DropdownMenuItem<String>(
-                                      value: c.id,
-                                      child: Text(
-                                        '${c.grade}° ${c.section} · ${c.name}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: classroom.id,
+                                isExpanded: true,
+                                icon: const Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                ),
+                                items: classrooms
+                                    .where((c) => c.id != null)
+                                    .map(
+                                      (c) => DropdownMenuItem<String>(
+                                        value: c.id,
+                                        child: Text(
+                                          '${c.grade}° ${c.section} · ${c.name}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (newClassroomId) {
-                                if (newClassroomId == null ||
-                                    newClassroomId == classroom.id) {
-                                  return;
-                                }
-                                final nextClassroom = classrooms.firstWhere(
-                                  (c) => c.id == newClassroomId,
-                                  orElse: () => classroom,
-                                );
-                                setState(() {
-                                  _selectedClassroom = nextClassroom;
-                                  _cachedStudents = null;
-                                });
-                              },
+                                    )
+                                    .toList(),
+                                onChanged: (newClassroomId) {
+                                  if (newClassroomId == null ||
+                                      newClassroomId == classroom.id) {
+                                    return;
+                                  }
+                                  final nextClassroom = classrooms.firstWhere(
+                                    (c) => c.id == newClassroomId,
+                                    orElse: () => classroom,
+                                  );
+                                  setState(() {
+                                    _selectedClassroom = nextClassroom;
+                                    _cachedStudents = null;
+                                  });
+                                },
+                              ),
                             ),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                      ],
+                      ElevatedButton.icon(
+                        onPressed: () => _showCreateStudentDialog(classroom),
+                        icon: const Icon(Icons.person_add, size: 16),
+                        label: const Text('Registrar'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1976D2),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 10),
                     ],
-                    ElevatedButton.icon(
-                      onPressed: () => _showCreateStudentDialog(classroom),
-                      icon: const Icon(Icons.person_add, size: 16),
-                      label: const Text('Registrar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1976D2),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -379,8 +388,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                       'Asistencias',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppDesignSystem.titleLarge(context).copyWith(
+                      style: GoogleFonts.manrope(
                         color: _brandBlue,
+                        fontSize: 24,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.4,
                         height: 1,
@@ -391,8 +401,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppDesignSystem.bodySmall(context).copyWith(
+                      style: GoogleFonts.manrope(
                         color: _outline,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.1,
                       ),
@@ -407,11 +418,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     );
   }
 
-  Widget _buildDashboardHeader(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-  }) {
+  Widget _buildDashboardHeader(BuildContext context, {required String title}) {
     return Padding(
       padding: AppDesignSystem.paddingSymmetric(
         context,
@@ -420,24 +427,28 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppDesignSystem.headlineLarge(context).copyWith(
-              color: _brandBlue,
-              fontSize: 40,
-              height: 0.95,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -1.4,
-            ),
-          ),
-          SizedBox(height: AppDesignSystem.getSpaceSM(context)),
-          Text(
-            subtitle,
-            style: AppDesignSystem.bodyMedium(
-              context,
-            ).copyWith(color: _outline, fontWeight: FontWeight.w500),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth;
+              final titleSize = maxWidth < 360
+                  ? 30.0
+                  : maxWidth < 420
+                  ? 34.0
+                  : 40.0;
+
+              return Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                  color: _brandBlue,
+                  fontSize: titleSize,
+                  height: 1.05,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.9,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -508,13 +519,14 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Aulas disponibles',
-                      style: TextStyle(
-                        fontSize: 18,
+                      style: GoogleFonts.manrope(
+                        fontSize: 24,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
+                        color: const Color(0xFF000D33),
+                        letterSpacing: -0.4,
                       ),
                     ),
                   ),
@@ -524,16 +536,15 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFDCFCE7),
+                      color: const Color(0xFFD8E2FF),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: const Text(
-                      'ACTIVO',
-                      style: TextStyle(
-                        color: Color(0xFF15803D),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
+                    child: Text(
+                      '${classrooms.length} aulas',
+                      style: GoogleFonts.manrope(
+                        color: const Color(0xFF2C4383),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -718,7 +729,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                         ),
                                       ),
                                       Text(
-                                        'DNI actual: ${student.dni}',
+                                        'DNI actual: ${_displayDni(student.dni)}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
@@ -773,7 +784,8 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                           TextFormField(
                             controller: dniCtrl,
                             decoration: InputDecoration(
-                              labelText: 'DNI *',
+                              labelText: 'DNI',
+                              helperText: 'Opcional',
                               prefixIcon: const Icon(Icons.credit_card_rounded),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -781,8 +793,10 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                             ),
                             keyboardType: TextInputType.number,
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'El DNI es requerido';
+                              if (value != null &&
+                                  value.trim().isNotEmpty &&
+                                  value.trim().length < 7) {
+                                return 'DNI debe tener al menos 7 dígitos';
                               }
                               return null;
                             },
@@ -1236,7 +1250,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                                       ),
                                     ),
                                     Text(
-                                      'ID: ${student.dni}',
+                                      'ID: ${_displayDni(student.dni)}',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -1365,144 +1379,100 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     final enrolled = classroom.capacity > 1
         ? classroom.capacity - 1
         : classroom.capacity;
-    final progress = classroom.capacity == 0
-        ? 0.0
-        : (enrolled / classroom.capacity).clamp(0.0, 1.0);
+    final studentsLabel = '$enrolled estudiantes';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x140F172A),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        classroom.name.toUpperCase(),
-                        style: const TextStyle(
-                          color: Color(0xFF1976D2),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${classroom.grade}° ${classroom.section}',
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
-                          height: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.group,
-                            size: 16,
-                            color: Color(0xFF64748B),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '$enrolled / ${classroom.capacity} estudiantes',
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 62,
-                  height: 62,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.class_, color: Color(0xFF1976D2)),
-                ),
-              ],
+    return InkWell(
+      onTap: () {
+        if (classroom.id == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Esta aula no tiene un identificador valido.'),
+              backgroundColor: Colors.red,
             ),
-            const SizedBox(height: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 8,
-                backgroundColor: const Color(0xFFE2E8F0),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF1976D2)),
+          );
+          return;
+        }
+        setState(() {
+          _selectedClassroom = classroom;
+          _cachedStudents = null;
+        });
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE1E3E4)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0F000D33),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1DA056),
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedClassroom = classroom;
-                        _cachedStudents = null;
-                      });
-                    },
-                    icon: const Icon(Icons.groups, size: 18),
-                    label: const Text('Alumnos'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1976D2),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _selectedClassroom = classroom;
-                        _cachedStudents = null;
-                      });
-                    },
-                    icon: const Icon(Icons.assignment_outlined, size: 18),
-                    label: const Text('Detalles'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1976D2),
-                      backgroundColor: const Color(0xFFE0E7FF),
-                      side: BorderSide.none,
-                      minimumSize: const Size.fromHeight(44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            const SizedBox(width: 12),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4E4F6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.groups_rounded, color: Color(0xFF2C4383)),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${classroom.grade}° ${classroom.section}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF000D33),
+                      height: 1.05,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    classroom.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF556474),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    studentsLabel,
+                    style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF455B9D),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFFC5C6D2)),
           ],
         ),
       ),
@@ -1511,10 +1481,47 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
   /// Construir lista de estudiantes del aula seleccionada
   Widget _buildStudentsList(ClassroomModel classroom) {
+    if (classroom.id == null) {
+      return const Center(
+        child: Text(
+          'No se puede cargar alumnos de esta aula.',
+          style: TextStyle(
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: Column(
         children: [
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Align(
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDBE1FF),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${classroom.grade}° ${classroom.section} - ${classroom.name}',
+                  style: GoogleFonts.manrope(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF2C4383),
+                  ),
+                ),
+              ),
+            ),
+          ),
           Row(
             children: [
               Expanded(
@@ -1533,14 +1540,18 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                           )
                         : null,
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: const Color(0xFFFFFFFF),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF455B9D)),
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14),
                   ),
@@ -1563,7 +1574,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -1668,24 +1679,35 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                 });
 
                 if (students.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No hay estudiantes para mostrar.',
-                      style: TextStyle(
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
+                  return _buildAnimatedStudentResults(
+                    const Center(
+                      child: Text(
+                        'No hay estudiantes para mostrar.',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
+                    keySeed:
+                        'empty-${_sortOrder.name}-${_statusFilter.name}-${_searchQuery.length}',
                   );
                 }
 
-                return ListView.separated(
-                  itemCount: students.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final student = students[index];
-                    return _buildModernStudentCard(student);
-                  },
+                return _buildAnimatedStudentResults(
+                  ListView.separated(
+                    key: ValueKey(
+                      'list-${_sortOrder.name}-${_statusFilter.name}-${_searchQuery.length}-${students.length}',
+                    ),
+                    itemCount: students.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final student = students[index];
+                      return _buildModernStudentCard(student);
+                    },
+                  ),
+                  keySeed:
+                      'list-${_sortOrder.name}-${_statusFilter.name}-${_searchQuery.length}-${students.length}',
                 );
               },
             ),
@@ -1695,197 +1717,526 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     );
   }
 
+  Widget _buildAnimatedStudentResults(Widget child, {required String keySeed}) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (widget, animation) {
+        final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+        final slide =
+            Tween<Offset>(
+              begin: const Offset(0.0, 0.04),
+              end: Offset.zero,
+            ).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            );
+
+        return FadeTransition(
+          opacity: fade,
+          child: SlideTransition(position: slide, child: widget),
+        );
+      },
+      child: KeyedSubtree(key: ValueKey(keySeed), child: child),
+    );
+  }
+
+  String _displayDni(String dni) {
+    final normalized = dni.trim();
+    return normalized.isEmpty ? 'Sin DNI' : normalized;
+  }
+
   Widget _buildModernStudentCard(StudentModel student) {
+    final fullName = '${student.firstName} ${student.lastName}'.trim();
+    final studentIdLabel = student.dni.trim().isEmpty
+        ? '#STU-SIN-DNI'
+        : '#STU-${student.dni}';
+    final statusColor = student.isActive
+        ? const Color(0xFF1DA056)
+        : const Color(0xFFBA1A1A);
+
+    return InkWell(
+      onTap: () => _showStudentDetailSheet(student),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE1E3E4), width: 1),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0F000D33),
+              blurRadius: 10,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 4,
+              height: 56,
+              decoration: BoxDecoration(
+                color: statusColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(width: 10),
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: const Color(0xFFD4E4F6),
+              child: Text(
+                student.firstName.isNotEmpty
+                    ? student.firstName[0].toUpperCase()
+                    : 'A',
+                style: GoogleFonts.manrope(
+                  color: const Color(0xFF2C4383),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fullName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF000D33),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'ID: $studentIdLabel',
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF556474),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFFC5C6D2)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showStudentDetailSheet(StudentModel student) async {
     final fullName = '${student.firstName} ${student.lastName}'.trim();
     final phone = (student.parentPhone?.trim().isNotEmpty ?? false)
         ? student.parentPhone!.trim()
-        : 'Sin teléfono';
+        : 'Sin teléfono registrado';
+    final classroom = _selectedClassroom;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 360;
-        final avatarRadius = isCompact ? 22.0 : 24.0;
-        final actionHeight = isCompact ? 40.0 : 44.0;
-
-        final editButton = OutlinedButton.icon(
-          onPressed: () => _handleEditStudent(student),
-          icon: const Icon(Icons.edit_rounded, size: 18),
-          label: const Text('Editar'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF1976D2),
-            backgroundColor: const Color(0xFFE0E7FF),
-            side: BorderSide.none,
-            minimumSize: Size.fromHeight(actionHeight),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-
-        final qrButton = ElevatedButton.icon(
-          onPressed: () => _handleShowStudentQR(student),
-          icon: const Icon(Icons.qr_code_2_rounded, size: 18),
-          label: const Text('QR'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1976D2),
-            foregroundColor: Colors.white,
-            minimumSize: Size.fromHeight(actionHeight),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
         return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x140F172A),
-                blurRadius: 12,
-                offset: Offset(0, 4),
-              ),
-            ],
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 14,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 18,
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: avatarRadius,
-                      backgroundColor: const Color(0xFFE0E7FF),
-                      child: Text(
-                        student.firstName.isNotEmpty
-                            ? student.firstName[0].toUpperCase()
-                            : 'A',
-                        style: TextStyle(
-                          color: const Color(0xFF1976D2),
-                          fontWeight: FontWeight.w800,
-                          fontSize: isCompact ? 16 : 18,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8F9FA),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5C6D2),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Perfil del Estudiante',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.manrope(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF000D33),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            fullName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: isCompact ? 15 : 16,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'DNI: ${student.dni}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF64748B),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.call_rounded,
-                                size: 14,
-                                color: Color(0xFF64748B),
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  phone,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Color(0xFF64748B),
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 124,
+                    height: 124,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE6EEFF), Color(0xFFD4E4F6)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: student.isActive
-                                ? const Color(0xFFDCFCE7)
-                                : const Color(0xFFFEE2E2),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            student.isActive ? 'ACTIVO' : 'INACTIVO',
-                            style: TextStyle(
-                              color: student.isActive
-                                  ? const Color(0xFF15803D)
-                                  : const Color(0xFFB91C1C),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: () => _handleDeleteStudent(student),
-                          borderRadius: BorderRadius.circular(999),
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEE2E2),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: const Icon(
-                              Icons.delete_forever_rounded,
-                              size: 22,
-                              color: Color(0xFFB91C1C),
-                            ),
-                          ),
+                      border: Border.all(color: Colors.white, width: 4),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x14000D33),
+                          blurRadius: 26,
+                          offset: Offset(0, 10),
                         ),
                       ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (isCompact)
-                  Column(
+                    alignment: Alignment.center,
+                    child: Text(
+                      student.firstName.isNotEmpty
+                          ? student.firstName[0].toUpperCase()
+                          : 'A',
+                      style: GoogleFonts.manrope(
+                        color: const Color(0xFF2C4383),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 46,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    fullName,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.manrope(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF000D33),
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
                     children: [
-                      SizedBox(width: double.infinity, child: editButton),
-                      const SizedBox(height: 8),
-                      SizedBox(width: double.infinity, child: qrButton),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(child: editButton),
-                      const SizedBox(width: 8),
-                      Expanded(child: qrButton),
+                      if (classroom != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD1E1F4),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '${classroom.grade}° ${classroom.section}',
+                            style: GoogleFonts.manrope(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF0D1D2A),
+                            ),
+                          ),
+                        ),
+                      Text(
+                        student.dni.trim().isEmpty
+                            ? '#ALU-SIN-DNI'
+                            : '#ALU-${student.dni}',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF556474),
+                        ),
+                      ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDetailMetricCard(
+                          label: 'Estado',
+                          value: student.isActive ? 'Activo' : 'Inactivo',
+                          accent: student.isActive
+                              ? const Color(0xFF1DA056)
+                              : const Color(0xFFBA1A1A),
+                          icon: Icons.verified,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildDetailMetricCard(
+                          label: 'Apoderado',
+                          value: phone == 'Sin teléfono registrado'
+                              ? 'Sin número'
+                              : 'Disponible',
+                          accent: const Color(0xFF2C4383),
+                          icon: Icons.contact_phone,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDetailActionButton(
+                    icon: Icons.qr_code_2,
+                    label: 'Ver código QR',
+                    foregroundColor: Colors.white,
+                    backgroundColor: const Color(0xFF000D33),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _handleShowStudentQR(student);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _buildDetailActionButton(
+                    icon: Icons.contact_phone,
+                    label: 'Contactar apoderado',
+                    foregroundColor: const Color(0xFF0D1D2A),
+                    backgroundColor: const Color(0xFFD1E1F4),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _showContactParentDialog(student);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _buildDetailActionButton(
+                    icon: Icons.edit_note,
+                    label: 'Editar estado académico',
+                    foregroundColor: const Color(0xFF000D33),
+                    backgroundColor: Colors.white,
+                    borderColor: const Color(0xFFC5C6D2),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _handleEditStudent(student);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _buildDetailActionButton(
+                    icon: Icons.delete_forever_rounded,
+                    label: 'Eliminar estudiante',
+                    foregroundColor: const Color(0xFFBA1A1A),
+                    backgroundColor: const Color(0xFFFFF1F2),
+                    borderColor: const Color(0xFFFECACA),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _handleDeleteStudent(student);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailMetricCard({
+    required String label,
+    required String value,
+    required Color accent,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE1E3E4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: accent),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF556474),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: GoogleFonts.manrope(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF000D33),
+              height: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailActionButton({
+    required IconData icon,
+    required String label,
+    required Color foregroundColor,
+    required Color backgroundColor,
+    Color? borderColor,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: foregroundColor,
+          backgroundColor: backgroundColor,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: borderColor == null
+                ? BorderSide.none
+                : BorderSide(color: borderColor),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 24),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.manrope(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: foregroundColor.withValues(alpha: 0.6),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showContactParentDialog(StudentModel student) async {
+    final parentPhone = (student.parentPhone?.trim().isNotEmpty ?? false)
+        ? student.parentPhone!.trim()
+        : '';
+    final messageCtrl = TextEditingController(
+      text:
+          'Hola, le escribo desde Asistencias sobre ${student.firstName} ${student.lastName}.',
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Contactar apoderado',
+                  style: GoogleFonts.manrope(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF000D33),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  parentPhone.isEmpty ? 'Sin teléfono registrado' : parentPhone,
+                  style: GoogleFonts.manrope(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF556474),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: messageCtrl,
+                  minLines: 3,
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    labelText: 'Mensaje',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: parentPhone.isEmpty
+                            ? null
+                            : () async {
+                                await Clipboard.setData(
+                                  ClipboardData(text: parentPhone),
+                                );
+                                if (!ctx.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Número copiado al portapapeles',
+                                    ),
+                                  ),
+                                );
+                              },
+                        icon: const Icon(Icons.copy),
+                        label: const Text('Copiar número'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: messageCtrl.text.trim()),
+                          );
+                          if (!ctx.mounted) return;
+                          Navigator.of(ctx).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Mensaje copiado al portapapeles'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.send),
+                        label: const Text('Copiar mensaje'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF000D33),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1895,278 +2246,53 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
   }
 
   Future<void> _showCreateStudentDialog(ClassroomModel classroom) async {
-    final nameCtrl = TextEditingController();
-    final lastNameCtrl = TextEditingController();
-    final dniCtrl = TextEditingController();
-    final parentPhoneCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
+    final created = await Navigator.of(context).push<bool>(
+      PageRouteBuilder<bool>(
+        settings: const RouteSettings(name: 'teacher-create-student'),
+        transitionDuration: AppDesignSystem.durationFast,
+        reverseTransitionDuration: AppDesignSystem.durationFast,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return TeacherCreateStudentScreen(classroom: classroom);
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: AppDesignSystem.curveSnappy,
+          );
 
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.person_add, color: Colors.green.shade600, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Nuevo estudiante'),
-                    Text(
-                      '${classroom.grade}° ${classroom.section}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.8,
-              maxHeight: MediaQuery.of(context).size.height * 0.65,
-            ),
-            child: SingleChildScrollView(
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Avatar placeholder
-                    Center(
-                      child: CircleAvatar(
-                        radius: 35,
-                        backgroundColor: Colors.green.shade100,
-                        child: Icon(
-                          Icons.person_add,
-                          size: 40,
-                          color: Colors.green.shade600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.15, 0),
+            end: Offset.zero,
+          ).animate(curvedAnimation);
 
-                    // Nombre
-                    TextFormField(
-                      controller: nameCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Nombre *',
-                        hintText: 'Ingresa el nombre',
-                        prefixIcon: const Icon(Icons.person),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                      ),
-                      textCapitalization: TextCapitalization.words,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'El nombre es requerido';
-                        }
-                        if (value.trim().length < 2) {
-                          return 'Nombre muy corto';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
+          final fadeAnimation = Tween<double>(
+            begin: 0.0,
+            end: 1.0,
+          ).animate(curvedAnimation);
 
-                    // Apellido
-                    TextFormField(
-                      controller: lastNameCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Apellido *',
-                        hintText: 'Ingresa el apellido',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                      ),
-                      textCapitalization: TextCapitalization.words,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'El apellido es requerido';
-                        }
-                        if (value.trim().length < 2) {
-                          return 'Apellido muy corto';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
+          return SlideTransition(
+            position: slideAnimation,
+            child: FadeTransition(opacity: fadeAnimation, child: child),
+          );
+        },
+      ),
+    );
 
-                    // DNI
-                    TextFormField(
-                      controller: dniCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'DNI *',
-                        hintText: 'Ingresa el DNI',
-                        prefixIcon: const Icon(Icons.badge),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'El DNI es requerido';
-                        }
-                        if (value.trim().length < 7) {
-                          return 'DNI debe tener al menos 7 dígitos';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
+    if (!mounted || created != true) return;
 
-                    // Teléfono
-                    TextFormField(
-                      controller: parentPhoneCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Teléfono del apoderado',
-                        hintText: 'Opcional',
-                        prefixIcon: const Icon(Icons.phone),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[50],
-                        helperText: 'Campo opcional',
-                      ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: TextButton.styleFrom(foregroundColor: Colors.grey[700]),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                // Validar formulario
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-
-                final firstName = nameCtrl.text.trim();
-                final lastName = lastNameCtrl.text.trim();
-                final dni = dniCtrl.text.trim();
-
-                Navigator.of(ctx).pop();
-
-                // Mostrar loader
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (_) => AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    content: const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(width: 20),
-                          Text('Creando estudiante...'),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-
-                final res = await StudentService.createStudent(
-                  firstName: firstName,
-                  lastName: lastName,
-                  dni: dni,
-                  classroomId: classroom.id!,
-                  parentEmail: null,
-                  parentPhone: parentPhoneCtrl.text.trim().isEmpty
-                      ? null
-                      : parentPhoneCtrl.text.trim(),
-                );
-
-                if (!mounted) return;
-                Navigator.of(context).pop(); // Cerrar loader
-
-                if (res['success'] == true) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.white),
-                          SizedBox(width: 12),
-                          Text('Estudiante creado exitosamente'),
-                        ],
-                      ),
-                      backgroundColor: Colors.green,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          const Icon(Icons.error, color: Colors.white),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              res['message'] ?? 'Error al crear estudiante',
-                            ),
-                          ),
-                        ],
-                      ),
-                      backgroundColor: Colors.red,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  );
-                }
-              },
-              icon: const Icon(Icons.save, size: 20),
-              label: const Text('Crear estudiante'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('Estudiante creado exitosamente'),
           ],
-        );
-      },
+        ),
+        backgroundColor: const Color(0xFF1DA056),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
@@ -2196,6 +2322,8 @@ class _StudentQRDialog extends StatelessWidget {
 
   Future<void> _downloadQR(BuildContext context) async {
     try {
+      final dniLabel = student.dni.trim().isEmpty ? 'Sin DNI' : student.dni;
+
       // Crear el PDF
       final pdf = pw.Document();
 
@@ -2259,7 +2387,7 @@ class _StudentQRDialog extends StatelessWidget {
                         ),
                         pw.SizedBox(height: 10),
                         pw.Text(
-                          'ID: ${student.dni}',
+                          'ID: $dniLabel',
                           style: const pw.TextStyle(fontSize: 16),
                         ),
                       ],
@@ -2298,7 +2426,7 @@ class _StudentQRDialog extends StatelessWidget {
       // Obtener directorio de documentos temporales
       final tempDir = await getTemporaryDirectory();
       final fileName =
-          'QR_${student.firstName}_${student.lastName}_${student.dni}.pdf';
+          'QR_${student.firstName}_${student.lastName}_${dniLabel.replaceAll(' ', '_')}.pdf';
       final file = File('${tempDir.path}/$fileName');
 
       // Guardar el PDF
@@ -2308,7 +2436,7 @@ class _StudentQRDialog extends StatelessWidget {
       await Share.shareXFiles(
         [XFile(file.path)],
         text: 'Código QR de ${student.firstName} ${student.lastName}',
-        subject: 'QR del estudiante ${student.dni}',
+        subject: 'QR del estudiante $dniLabel',
       );
 
       // Mostrar mensaje de éxito
@@ -2541,7 +2669,9 @@ class _StudentQRDialog extends StatelessWidget {
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
-                                        student.dni,
+                                        student.dni.trim().isEmpty
+                                            ? 'Sin DNI'
+                                            : student.dni,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(

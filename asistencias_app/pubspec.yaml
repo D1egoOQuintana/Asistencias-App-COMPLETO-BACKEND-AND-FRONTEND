@@ -49,12 +49,15 @@ dependencies:
   flutter_adaptive_scaffold: ^0.2.2
   transition: ^2.0.2
   rive: ^0.13.13
+  google_fonts: ^6.2.1
   
   # Navigation
   go_router: ^14.2.7
+  get: ^4.7.2
   
   # Sidebar & Layout
   flutter_admin_scaffold: ^1.2.0
+  panara_dialogs: ^0.1.5
 
 dev_dependencies:
   flutter_test:

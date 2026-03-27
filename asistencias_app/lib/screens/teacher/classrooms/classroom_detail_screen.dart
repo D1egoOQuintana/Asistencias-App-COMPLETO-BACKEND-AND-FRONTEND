@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
@@ -7,14 +8,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../models/classroom_model.dart';
 import '../../../models/student_model.dart';
 import '../../../services/student_service.dart';
-// import 'attendance_session_screen.dart';
+import '../../../theme/app_design_system.dart';
 
 enum SortOrder { aToZ, zToA, newest, oldest }
 
 class ClassroomDetailScreen extends StatefulWidget {
   final ClassroomModel classroom;
 
-  const ClassroomDetailScreen({super.key, required this.classroom});
+  const ClassroomDetailScreen({
+    super.key,
+    required this.classroom,
+  });
 
   @override
   State<ClassroomDetailScreen> createState() => _ClassroomDetailScreenState();
@@ -37,15 +41,31 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   bool _attendanceActive = false;
   bool _isScanning = false;
   bool _isShowingResult = false;
+  bool _torchEnabled = false;
   List<StudentModel> _students = [];
   Map<String, dynamic> _attendanceData = {};
   ClassroomModel? _classroomOverride;
+  late final MobileScannerController _scannerController;
+  DateTime? _lastScanAt;
+  String? _lastScanRaw;
+  Map<String, String> _lastScannedInfo = const {};
+  String _lastScanStatus = 'LISTO';
+  Color _lastScanStatusColor = Colors.blue;
+  bool _lastScanSuccess = false;
+  bool _scanLineForward = true;
 
   @override
   void initState() {
     super.initState();
+    _scannerController = MobileScannerController();
     _loadStudents();
     _loadAttendanceForDay(_selectedDay);
+  }
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -143,21 +163,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                 ),
                 const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                    height: 260,
-                    child: MobileScanner(
-                      onDetect: (capture) {
-                        final barcode = capture.barcodes.firstOrNull;
-                        final raw = barcode?.rawValue;
-                        if (raw != null && raw.isNotEmpty) {
-                          _processQRCode(raw);
-                        }
-                      },
-                    ),
-                  ),
-                ),
+                _buildScannerExperience(),
                 const SizedBox(height: 12),
                 const Text(
                   'Resumen del día',
@@ -171,6 +177,474 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildScannerExperience() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: SizedBox(
+        height: 520,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: MobileScanner(
+                controller: _scannerController,
+                onDetect: (capture) {
+                  for (final barcode in capture.barcodes) {
+                    final raw = barcode.rawValue;
+                    if (raw == null || raw.isEmpty) continue;
+
+                    final now = DateTime.now();
+                    if (_lastScanAt != null && _lastScanRaw == raw) {
+                      final diff = now.difference(_lastScanAt!).inMilliseconds;
+                      if (diff < 1200) {
+                        return;
+                      }
+                    }
+
+                    _lastScanAt = now;
+                    _lastScanRaw = raw;
+                    _processQRCode(raw);
+                    return;
+                  }
+                },
+              ),
+            ),
+            Positioned.fill(
+              child: Container(color: Colors.black.withOpacity(0.32)),
+            ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.25),
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.25),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                height: 78,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  border: Border(
+                    bottom: BorderSide(color: Colors.white.withOpacity(0.18)),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: Colors.white.withOpacity(0.18),
+                      child: const Icon(Icons.school, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Attendance',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () {},
+                      icon: const Icon(
+                        Icons.notifications_outlined,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 286,
+                    height: 286,
+                    child: Stack(
+                      children: [
+                        const Positioned(
+                          top: 0,
+                          left: 0,
+                          child: _ScanCorner(top: true, left: true),
+                        ),
+                        const Positioned(
+                          top: 0,
+                          right: 0,
+                          child: _ScanCorner(top: true, left: false),
+                        ),
+                        const Positioned(
+                          bottom: 0,
+                          left: 0,
+                          child: _ScanCorner(top: false, left: true),
+                        ),
+                        const Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: _ScanCorner(top: false, left: false),
+                        ),
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.18),
+                              ),
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.qr_code_scanner,
+                                size: 64,
+                                color: Color(0x55FFFFFF),
+                              ),
+                            ),
+                          ),
+                        ),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(
+                            begin: _scanLineForward ? -110 : 110,
+                            end: _scanLineForward ? 110 : -110,
+                          ),
+                          duration: const Duration(milliseconds: 2600),
+                          onEnd: () {
+                            if (!mounted) return;
+                            setState(
+                              () => _scanLineForward = !_scanLineForward,
+                            );
+                          },
+                          builder: (context, yOffset, child) {
+                            return Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 143 + yOffset,
+                              child: IgnorePointer(
+                                child: Container(
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.transparent,
+                                        const Color(
+                                          0xFF1C6EE8,
+                                        ).withOpacity(0.2),
+                                        const Color(0xFF1C6EE8),
+                                        const Color(
+                                          0xFF1C6EE8,
+                                        ).withOpacity(0.2),
+                                        Colors.transparent,
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    _isScanning
+                        ? 'Procesando QR...'
+                        : 'Alinea el código QR dentro del marco',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.88),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 100,
+              child: _buildLastScannedCard(),
+            ),
+            Positioned(
+              right: 12,
+              top: 200,
+              child: Column(
+                children: [
+                  _buildFloatingIconButton(
+                    icon: _torchEnabled
+                        ? Icons.flashlight_on
+                        : Icons.flashlight_off,
+                    onTap: () {
+                      setState(() => _torchEnabled = !_torchEnabled);
+                      _scannerController.toggleTorch();
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildFloatingIconButton(
+                    icon: Icons.keyboard_alt_outlined,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Próximamente: ingreso manual de código',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 18,
+              right: 18,
+              bottom: 20,
+              child: ElevatedButton.icon(
+                onPressed: _attendanceActive
+                    ? _stopAttendanceSession
+                    : _startAttendanceSession,
+                icon: Icon(
+                  _attendanceActive ? Icons.stop : Icons.arrow_forward,
+                ),
+                label: Text(
+                  _attendanceActive ? 'Finish Session' : 'Iniciar sesión',
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  backgroundColor: const Color(0xFF00174B),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+            if (_isScanning)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black.withOpacity(0.25),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastScannedCard() {
+    if (_lastScannedInfo.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.5)),
+        ),
+        child: const Text(
+          'Escanea un QR para mostrar la información completa del estudiante.',
+          style: TextStyle(fontWeight: FontWeight.w600),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    final studentName = _lastScannedInfo['name'] ?? 'Estudiante';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.94),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x29000D33),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 28,
+            backgroundColor: const Color(0xFF0059BB).withOpacity(0.12),
+            child: const Icon(Icons.person, color: Color(0xFF0059BB), size: 30),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        studentName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF000D33),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _lastScanStatusColor.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Text(
+                        _lastScanStatus,
+                        style: TextStyle(
+                          color: _lastScanStatusColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                _buildInfoLine(
+                  'DNI',
+                  _lastScannedInfo['dni'] ?? 'No disponible',
+                ),
+                _buildInfoLine(
+                  'Aula',
+                  _lastScannedInfo['classroom'] ?? widget.classroom.name,
+                ),
+                _buildInfoLine(
+                  'Correo apoderado',
+                  _lastScannedInfo['parentEmail'] ?? 'No registrado',
+                ),
+                _buildInfoLine(
+                  'Teléfono apoderado',
+                  _lastScannedInfo['parentPhone'] ?? 'No registrado',
+                ),
+                _buildInfoLine('Hora', _lastScannedInfo['time'] ?? '--:--'),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      _lastScanSuccess ? Icons.check_circle : Icons.info,
+                      color: _lastScanStatusColor,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _lastScannedInfo['message'] ?? '',
+                        style: TextStyle(
+                          color: _lastScanStatusColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: onTap,
+        child: Container(
+          width: 52,
+          height: 52,
+          alignment: Alignment.center,
+          child: Icon(icon, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(fontSize: 12, color: Color(0xFF444650)),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatClock(DateTime value) {
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final ampm = value.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $ampm';
+  }
+
+  void _updateLastScannedCard({
+    required String studentName,
+    required StudentModel? student,
+    required String message,
+    required String status,
+    required Color statusColor,
+    required bool success,
+  }) {
+    if (!mounted) return;
+
+    final now = DateTime.now();
+    setState(() {
+      _lastScanStatus = status;
+      _lastScanStatusColor = statusColor;
+      _lastScanSuccess = success;
+      _lastScannedInfo = {
+        'name': studentName,
+        'dni': student?.dni ?? 'No disponible',
+        'parentEmail': student?.parentEmail ?? 'No registrado',
+        'parentPhone': student?.parentPhone ?? 'No registrado',
+        'classroom': widget.classroom.name,
+        'time': _formatClock(now),
+        'message': message,
+      };
+    });
   }
 
   Widget _buildDailyAttendanceList(String? classroomId) {
@@ -455,20 +929,52 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
     );
   }
 
-  void _showScheduleSettings() {
-    showDialog(
-      context: context,
-      builder: (context) => _ScheduleSettingsDialog(
-        classroom: widget.classroom,
-        onSaved: () {
-          setState(() {
-            // Refrescar día/horario actual para habilitar QR inmediatamente
-            _selectedDay = DateTime.now();
-            _focusedDay = DateTime.now();
-          });
+  Future<void> _showScheduleSettings() async {
+    final saved = await Navigator.of(context).push<bool>(
+      PageRouteBuilder(
+        settings: const RouteSettings(name: 'classroom-schedule-settings'),
+        transitionDuration: AppDesignSystem.durationFast,
+        reverseTransitionDuration: AppDesignSystem.durationFast,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return ScheduleSettingsScreen(classroom: widget.classroom);
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: AppDesignSystem.curveSnappy,
+          );
+
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.15, 0),
+            end: Offset.zero,
+          ).animate(curvedAnimation);
+
+          final fadeAnimation = Tween<double>(
+            begin: 0.0,
+            end: 1.0,
+          ).animate(curvedAnimation);
+
+          return SlideTransition(
+            position: slideAnimation,
+            child: FadeTransition(opacity: fadeAnimation, child: child),
+          );
         },
       ),
     );
+
+    if (saved == true && mounted) {
+      setState(() {
+        _selectedDay = DateTime.now();
+        _focusedDay = DateTime.now();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Horarios guardados exitosamente'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   void _startAttendanceSession() async {
@@ -563,28 +1069,92 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   Future<void> _processQRCode(String qrData) async {
     if (_isScanning) return;
     setState(() => _isScanning = true);
-    // Declarar variables en scope amplio para usarlas en catch
     String studentName = 'Estudiante';
+    StudentModel? scannedStudent;
     try {
-      if (qrData.isEmpty) return;
+      if (qrData.isEmpty) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: null,
+          message: 'Código vacío',
+          status: 'ERROR',
+          statusColor: Colors.red,
+          success: false,
+        );
+        return;
+      }
+
       dynamic data;
       try {
         data = jsonDecode(qrData);
       } catch (_) {
-        // No es JSON; ignorar
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: null,
+          message: 'El QR no tiene formato JSON válido',
+          status: 'ERROR',
+          statusColor: Colors.red,
+          success: false,
+        );
         return;
       }
-      if (data is! Map<String, dynamic>) return;
-      if (data['type'] != 'student') return;
-      if (!data.containsKey('id') || !data.containsKey('name')) return;
+
+      if (data is! Map<String, dynamic>) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: null,
+          message: 'Formato de datos inválido',
+          status: 'ERROR',
+          statusColor: Colors.red,
+          success: false,
+        );
+        return;
+      }
+      if (data['type'] != 'student') {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: null,
+          message: 'El QR no corresponde a un estudiante',
+          status: 'ERROR',
+          statusColor: Colors.red,
+          success: false,
+        );
+        return;
+      }
+      if (!data.containsKey('id') || !data.containsKey('name')) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: null,
+          message: 'Datos de estudiante incompletos en el QR',
+          status: 'ERROR',
+          statusColor: Colors.red,
+          success: false,
+        );
+        return;
+      }
 
       final studentId = data['id'].toString();
       studentName = data['name'].toString();
+      for (final student in _students) {
+        if (student.id == studentId) {
+          scannedStudent = student;
+          break;
+        }
+      }
+      scannedStudent ??= await StudentService.getStudentById(studentId);
 
       // Validaciones de horario y sesión
       final now = DateTime.now();
       final schedule = _getScheduleFor(now, widget.classroom);
       if (schedule == null) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: scannedStudent,
+          message: 'No hay clase programada para hoy',
+          status: 'SIN HORARIO',
+          statusColor: Colors.orange,
+          success: false,
+        );
         _showResultModal(
           title: 'No programado',
           message: 'Hoy no hay clase programada para este salón',
@@ -599,6 +1169,16 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
         final startMsg = '${schedule.startTime}';
         final endMsg = '${schedule.endTime}';
         final ended = _isAfterEndTime(now, schedule);
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: scannedStudent,
+          message: ended
+              ? 'Clase finalizada ($startMsg - $endMsg)'
+              : 'Fuera de horario ($startMsg - $endMsg)',
+          status: ended ? 'CERRADO' : 'HORARIO',
+          statusColor: ended ? Colors.red : Colors.orange,
+          success: false,
+        );
         _showResultModal(
           title: ended ? 'Clase finalizada' : 'Fuera de horario',
           message: ended
@@ -611,6 +1191,14 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
       }
 
       if (!_attendanceActive || _sessionId == null) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: scannedStudent,
+          message: 'Debes iniciar sesión para registrar asistencia',
+          status: 'INACTIVO',
+          statusColor: Colors.blue,
+          success: false,
+        );
         _showResultModal(
           title: 'Inicia la sesión',
           message: 'Debes iniciar la sesión de asistencia antes de escanear.',
@@ -698,6 +1286,16 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
         });
       });
 
+      _updateLastScannedCard(
+        studentName: studentName,
+        student: scannedStudent,
+        message:
+            'Asistencia marcada como ${status == 'present' ? 'Presente' : 'Tarde'}',
+        status: 'SUCCESS',
+        statusColor: Colors.green,
+        success: true,
+      );
+
       _showResultModal(
         title: 'Asistencia registrada',
         message: '$studentName • ${status == 'present' ? 'Presente' : 'Tarde'}',
@@ -706,6 +1304,14 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
       );
     } catch (e) {
       if (e.toString().contains('YA_REGISTRADO')) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: scannedStudent,
+          message: 'Asistencia ya registrada hoy',
+          status: 'DUPLICADO',
+          statusColor: Colors.orange,
+          success: false,
+        );
         _showResultModal(
           title: 'Ya registrado',
           message: '$studentName ya tiene asistencia registrada hoy',
@@ -713,6 +1319,14 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
           icon: Icons.info,
         );
       } else {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: scannedStudent,
+          message: 'Error al procesar QR',
+          status: 'ERROR',
+          statusColor: Colors.red,
+          success: false,
+        );
         _showResultModal(
           title: 'Error',
           message: 'Error al procesar QR: $e',
@@ -782,6 +1396,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   }
 
   // Stream de asistencias del día y salón desde 'attendance'
+  // ignore: unused_element
   Stream<QuerySnapshot> _attendanceStreamForDay(
     String classroomId,
     DateTime day,
@@ -878,6 +1493,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   }
 
   // Reabrir asistencia del día
+  // ignore: unused_element
   void _reopenAttendance(DateTime day) async {
     final dateKey =
         '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
@@ -971,26 +1587,66 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   // Removed old _buildStudentAttendanceList in favor of real-time provider widget
 }
 
-class _ScheduleSettingsDialog extends StatefulWidget {
-  final ClassroomModel classroom;
-  final VoidCallback onSaved;
+class _ScanCorner extends StatelessWidget {
+  final bool top;
+  final bool left;
 
-  const _ScheduleSettingsDialog({
-    required this.classroom,
-    required this.onSaved,
-  });
+  const _ScanCorner({required this.top, required this.left});
 
   @override
-  State<_ScheduleSettingsDialog> createState() =>
-      _ScheduleSettingsDialogState();
+  Widget build(BuildContext context) {
+    const borderColor = Color(0xFF0059BB);
+
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topLeft: top && left ? const Radius.circular(14) : Radius.zero,
+          topRight: top && !left ? const Radius.circular(14) : Radius.zero,
+          bottomLeft: !top && left ? const Radius.circular(14) : Radius.zero,
+          bottomRight: !top && !left ? const Radius.circular(14) : Radius.zero,
+        ),
+        border: Border(
+          top: top
+              ? const BorderSide(color: borderColor, width: 4)
+              : BorderSide.none,
+          bottom: !top
+              ? const BorderSide(color: borderColor, width: 4)
+              : BorderSide.none,
+          left: left
+              ? const BorderSide(color: borderColor, width: 4)
+              : BorderSide.none,
+          right: !left
+              ? const BorderSide(color: borderColor, width: 4)
+              : BorderSide.none,
+        ),
+      ),
+    );
+  }
 }
 
-class _ScheduleSettingsDialogState extends State<_ScheduleSettingsDialog> {
+class ScheduleSettingsScreen extends StatefulWidget {
+  final ClassroomModel classroom;
+
+  static const Color brandBlue = Color(0xFF1976D2);
+  static const Color surfaceLow = Color(0xFFF2F4F5);
+  static const Color surfaceMid = Color(0xFFEDEFF2);
+  static const Color outline = Color(0xFF5F6470);
+  static const Color outlineVariant = Color(0xFFC5C6D2);
+  static const Color secondaryFixed = Color(0xFFD8E2FF);
+
+  const ScheduleSettingsScreen({super.key, required this.classroom});
+
+  @override
+  State<ScheduleSettingsScreen> createState() => _ScheduleSettingsScreenState();
+}
+
+class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
   final Map<String, Map<String, String>> _schedules = {};
-  final Map<String, Map<String, TextEditingController>> _controllers = {};
   bool _isLoading = false;
 
-  final Map<String, String> _weekDays = {
+  final Map<String, String> _weekDays = const {
     'monday': 'Lunes',
     'tuesday': 'Martes',
     'wednesday': 'Miércoles',
@@ -1014,366 +1670,207 @@ class _ScheduleSettingsDialogState extends State<_ScheduleSettingsDialog> {
           'endTime': entry.value.endTime,
           'maxLateTime': entry.value.maxLateTime,
         };
-
-        // Inicializar controladores para este día
-        _controllers[entry.key] = {
-          'startTime': TextEditingController(text: entry.value.startTime),
-          'endTime': TextEditingController(text: entry.value.endTime),
-          'maxLateTime': TextEditingController(text: entry.value.maxLateTime),
-        };
       }
     }
   }
 
-  @override
-  void dispose() {
-    // Limpiar controladores
-    for (final dayControllers in _controllers.values) {
-      for (final controller in dayControllers.values) {
-        controller.dispose();
-      }
-    }
-    super.dispose();
+  int _toMinutes(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length != 2) return 0;
+    final hour = int.tryParse(parts[0]) ?? 0;
+    final minute = int.tryParse(parts[1]) ?? 0;
+    return (hour * 60) + minute;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isSmallScreen = screenSize.width < 600 || screenSize.height < 700;
+  String _formatHour(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length != 2) return hhmm;
+    return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+  }
 
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaler: TextScaler.linear(1.0), // Fuerza tamaño fijo de texto
+  int _totalConfiguredMinutes() {
+    var total = 0;
+    for (final schedule in _schedules.values) {
+      final start = _toMinutes(schedule['startTime'] ?? '08:00');
+      final end = _toMinutes(schedule['endTime'] ?? '17:00');
+      if (end > start) total += (end - start);
+    }
+    return total;
+  }
+
+  int _configuredDaysCount() => _schedules.length;
+
+  String _totalHoursLabel() {
+    final hours = _totalConfiguredMinutes() / 60;
+    final text = hours == hours.roundToDouble()
+        ? hours.toInt().toString()
+        : hours.toStringAsFixed(1);
+    return '$text horas operativas configuradas';
+  }
+
+  int _loadPercent() {
+    const fullWeekMinutes = 49 * 60;
+    final percentage = (_totalConfiguredMinutes() / fullWeekMinutes) * 100;
+    return percentage.clamp(0, 100).round();
+  }
+
+  TimeOfDay _parseTime(String hhmm) {
+    final parts = hhmm.split(':');
+    if (parts.length != 2) return const TimeOfDay(hour: 8, minute: 0);
+    return TimeOfDay(
+      hour: int.tryParse(parts[0]) ?? 8,
+      minute: int.tryParse(parts[1]) ?? 0,
+    );
+  }
+
+  String _timeLabel(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _editDaySchedule(String dayKey, String dayName) async {
+    final existing = _schedules[dayKey];
+    var enabled = existing != null;
+    var start = _parseTime(existing?['startTime'] ?? '08:00');
+    var end = _parseTime(existing?['endTime'] ?? '17:00');
+    var maxLate = _parseTime(existing?['maxLateTime'] ?? '08:15');
+
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: ScheduleSettingsScreen.surfaceLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isSmallScreen ? screenSize.width * 0.95 : 600,
-            maxHeight: isSmallScreen ? screenSize.height * 0.9 : 700,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header - Responsivo
-              Container(
-                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
-                  ),
-                  border: Border(
-                    bottom: BorderSide(color: Colors.blue.shade200),
-                  ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> pickTime(
+              TimeOfDay current,
+              ValueChanged<TimeOfDay> onPicked,
+            ) async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: current,
+              );
+              if (picked != null) {
+                setSheetState(() => onPicked(picked));
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 20,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                 ),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.schedule,
-                      color: Colors.blue.shade700,
-                      size: isSmallScreen ? 24 : 28,
-                    ),
-                    SizedBox(width: isSmallScreen ? 8 : 12),
-                    Expanded(
-                      child: Text(
-                        'Configurar Horarios',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.blue.shade700,
-                          fontWeight: FontWeight.bold,
-                          fontSize: isSmallScreen ? 18 : null,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            dayName,
+                            style: GoogleFonts.manrope(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: ScheduleSettingsScreen.brandBlue,
+                            ),
+                          ),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        Switch(
+                          value: enabled,
+                          onChanged: (value) {
+                            setSheetState(() => enabled = value);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      enabled
+                          ? 'Configura el rango horario y la puntualidad.'
+                          : 'Activa para añadir horario a este día.',
+                      style: GoogleFonts.manrope(
+                        color: ScheduleSettingsScreen.outline,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.close, size: isSmallScreen ? 20 : 24),
-                      padding: EdgeInsets.all(isSmallScreen ? 4 : 8),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Lista de días - Scrolleable
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
-                  child: ListView(
-                    children: _weekDays.entries.map((dayEntry) {
-                      final dayKey = dayEntry.key;
-                      final dayName = dayEntry.value;
-
-                      return _buildDayScheduleCard(
-                        dayKey,
-                        dayName,
-                        isSmallScreen,
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-
-              // Botones - Responsivo
-              Container(
-                padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: Size(0, isSmallScreen ? 44 : 48),
-                        ),
-                        child: Text(
-                          'Cancelar',
-                          style: TextStyle(fontSize: isSmallScreen ? 14 : null),
-                        ),
+                    const SizedBox(height: 20),
+                    if (enabled) ...[
+                      _TimePickerTile(
+                        label: 'Hora de entrada',
+                        value: _timeLabel(start),
+                        icon: Icons.login_rounded,
+                        onTap: () => pickTime(start, (picked) => start = picked),
                       ),
-                    ),
-                    SizedBox(width: isSmallScreen ? 12 : 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _saveSchedules,
+                      const SizedBox(height: 10),
+                      _TimePickerTile(
+                        label: 'Hora de salida',
+                        value: _timeLabel(end),
+                        icon: Icons.logout_rounded,
+                        onTap: () => pickTime(end, (picked) => end = picked),
+                      ),
+                      const SizedBox(height: 10),
+                      _TimePickerTile(
+                        label: 'Puntual hasta',
+                        value: _timeLabel(maxLate),
+                        icon: Icons.schedule,
+                        onTap: () =>
+                            pickTime(maxLate, (picked) => maxLate = picked),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.of(sheetContext).pop(true),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
+                          backgroundColor: ScheduleSettingsScreen.brandBlue,
                           foregroundColor: Colors.white,
-                          minimumSize: Size(0, isSmallScreen ? 44 : 48),
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
-                        child: _isLoading
-                            ? SizedBox(
-                                width: isSmallScreen ? 16 : 20,
-                                height: isSmallScreen ? 16 : 20,
-                                child: const CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                'Guardar',
-                                style: TextStyle(
-                                  fontSize: isSmallScreen ? 14 : null,
-                                ),
-                              ),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: const Text(
+                          'Aplicar cambios',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDayScheduleCard(
-    String dayKey,
-    String dayName,
-    bool isSmallScreen,
-  ) {
-    final schedule = _schedules[dayKey];
-    final hasSchedule = schedule != null;
-
-    return Card(
-      margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 12),
-      child: Padding(
-        padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Transform.scale(
-                  scale: isSmallScreen ? 0.9 : 1.0,
-                  child: Switch(
-                    value: hasSchedule,
-                    onChanged: (value) {
-                      setState(() {
-                        if (value) {
-                          _schedules[dayKey] = {
-                            'startTime': '08:00',
-                            'endTime': '17:00',
-                            'maxLateTime': '08:15',
-                          };
-
-                          // Crear controladores para este día
-                          _controllers[dayKey] = {
-                            'startTime': TextEditingController(text: '08:00'),
-                            'endTime': TextEditingController(text: '17:00'),
-                            'maxLateTime': TextEditingController(text: '08:15'),
-                          };
-                        } else {
-                          _schedules.remove(dayKey);
-
-                          // Limpiar controladores
-                          if (_controllers.containsKey(dayKey)) {
-                            for (final controller
-                                in _controllers[dayKey]!.values) {
-                              controller.dispose();
-                            }
-                            _controllers.remove(dayKey);
-                          }
-                        }
-                      });
-                    },
-                  ),
-                ),
-                SizedBox(width: isSmallScreen ? 8 : 12),
-                Expanded(
-                  child: Text(
-                    dayName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: isSmallScreen ? 14 : 16,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-
-            if (hasSchedule) ...[
-              SizedBox(height: isSmallScreen ? 12 : 16),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isVerySmall = constraints.maxWidth < 300;
-
-                  return isVerySmall
-                      ? Column(
-                          children: [
-                            _buildTimeField(
-                              'Hora de entrada',
-                              dayKey,
-                              'startTime',
-                              (value) =>
-                                  _schedules[dayKey]!['startTime'] = value,
-                              isSmallScreen,
-                            ),
-                            SizedBox(height: isSmallScreen ? 8 : 12),
-                            _buildTimeField(
-                              'Hora de salida',
-                              dayKey,
-                              'endTime',
-                              (value) => _schedules[dayKey]!['endTime'] = value,
-                              isSmallScreen,
-                            ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: _buildTimeField(
-                                'Hora de entrada',
-                                dayKey,
-                                'startTime',
-                                (value) =>
-                                    _schedules[dayKey]!['startTime'] = value,
-                                isSmallScreen,
-                              ),
-                            ),
-                            SizedBox(width: isSmallScreen ? 8 : 12),
-                            Expanded(
-                              child: _buildTimeField(
-                                'Hora de salida',
-                                dayKey,
-                                'endTime',
-                                (value) =>
-                                    _schedules[dayKey]!['endTime'] = value,
-                                isSmallScreen,
-                              ),
-                            ),
-                          ],
-                        );
-                },
-              ),
-              SizedBox(height: isSmallScreen ? 8 : 12),
-              _buildTimeField(
-                'Máximo para tardanza',
-                dayKey,
-                'maxLateTime',
-                (value) => _schedules[dayKey]!['maxLateTime'] = value,
-                isSmallScreen,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimeField(
-    String label,
-    String dayKey,
-    String timeKey,
-    Function(String) onChanged,
-    bool isSmallScreen,
-  ) {
-    // Asegurar que existe el controlador
-    if (!_controllers.containsKey(dayKey)) {
-      _controllers[dayKey] = {};
-    }
-
-    if (!_controllers[dayKey]!.containsKey(timeKey)) {
-      _controllers[dayKey]![timeKey] = TextEditingController(
-        text: _schedules[dayKey]?[timeKey] ?? '08:00',
-      );
-    }
-
-    final controller = _controllers[dayKey]![timeKey]!;
-
-    return TextFormField(
-      controller: controller,
-      style: TextStyle(fontSize: isSmallScreen ? 14 : null),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(fontSize: isSmallScreen ? 12 : null),
-        border: const OutlineInputBorder(),
-        suffixIcon: Icon(Icons.access_time, size: isSmallScreen ? 20 : 24),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: isSmallScreen ? 12 : 16,
-          vertical: isSmallScreen ? 12 : 16,
-        ),
-      ),
-      onChanged: onChanged,
-      keyboardType: TextInputType.text,
-      onTap: () async {
-        final currentValue = controller.text;
-        final time = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay(
-            hour: int.parse(currentValue.split(':')[0]),
-            minute: int.parse(currentValue.split(':')[1]),
-          ),
+            );
+          },
         );
-
-        if (time != null) {
-          final formattedTime =
-              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-
-          // Actualizar el controlador inmediatamente
-          controller.text = formattedTime;
-
-          // Actualizar el mapa de horarios
-          onChanged(formattedTime);
-        }
       },
-      readOnly: true,
     );
+
+    if (changed != true || !mounted) return;
+
+    setState(() {
+      if (enabled) {
+        _schedules[dayKey] = {
+          'startTime': _timeLabel(start),
+          'endTime': _timeLabel(end),
+          'maxLateTime': _timeLabel(maxLate),
+        };
+      } else {
+        _schedules.remove(dayKey);
+      }
+    });
   }
 
   Future<void> _saveSchedules() async {
     setState(() => _isLoading = true);
 
     try {
-      // Convertir a formato requerido
       final Map<String, ClassSchedule> scheduleMap = {};
-
       for (final entry in _schedules.entries) {
         scheduleMap[entry.key] = ClassSchedule(
           dayOfWeek: entry.key,
@@ -1383,7 +1880,6 @@ class _ScheduleSettingsDialogState extends State<_ScheduleSettingsDialog> {
         );
       }
 
-      // Actualizar en Firestore
       await FirebaseFirestore.instance
           .collection('classrooms')
           .doc(widget.classroom.id)
@@ -1394,16 +1890,8 @@ class _ScheduleSettingsDialogState extends State<_ScheduleSettingsDialog> {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-      widget.onSaved();
-
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Horarios guardados exitosamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -1415,8 +1903,524 @@ class _ScheduleSettingsDialogState extends State<_ScheduleSettingsDialog> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final crossAxisCount = width >= 1100
+        ? 3
+        : width >= 760
+        ? 2
+        : 1;
+
+    return Scaffold(
+      backgroundColor: ScheduleSettingsScreen.surfaceLow,
+      appBar: AppBar(
+        backgroundColor: ScheduleSettingsScreen.surfaceLow,
+        elevation: 0,
+        centerTitle: false,
+        iconTheme: const IconThemeData(color: ScheduleSettingsScreen.brandBlue),
+        title: Text(
+          'Asistencias',
+          style: GoogleFonts.manrope(
+            color: ScheduleSettingsScreen.brandBlue,
+            fontWeight: FontWeight.w800,
+            fontSize: 24,
+          ),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton.icon(
+              onPressed: _isLoading ? null : _saveSchedules,
+              style: FilledButton.styleFrom(
+                backgroundColor: ScheduleSettingsScreen.brandBlue,
+                foregroundColor: Colors.white,
+              ),
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(_isLoading ? 'Guardando' : 'Guardar'),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                ScheduleSettingsScreen.surfaceLow,
+                ScheduleSettingsScreen.surfaceMid,
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+            children: [
+            Text(
+              'Configuración de Horarios',
+              style: GoogleFonts.manrope(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: ScheduleSettingsScreen.brandBlue,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Define y gestiona los rangos operativos de la institución para el ciclo lectivo vigente.',
+              style: GoogleFonts.manrope(
+                fontSize: 15,
+                color: ScheduleSettingsScreen.outline,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 20),
+            GridView.builder(
+              itemCount: _weekDays.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 182,
+              ),
+              itemBuilder: (context, index) {
+                final entry = _weekDays.entries.elementAt(index);
+                final schedule = _schedules[entry.key];
+
+                if (schedule != null) {
+                  return _ConfiguredDayCard(
+                    dayName: entry.value,
+                    startTime: _formatHour(schedule['startTime'] ?? '08:00'),
+                    endTime: _formatHour(schedule['endTime'] ?? '17:00'),
+                    maxLateTime: _formatHour(schedule['maxLateTime'] ?? '08:15'),
+                    onEdit: () => _editDaySchedule(entry.key, entry.value),
+                  );
+                }
+
+                return _UnconfiguredDayCard(
+                  dayName: entry.value,
+                  onAdd: () => _editDaySchedule(entry.key, entry.value),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _WeeklySummaryCard(
+              hoursLabel: _totalHoursLabel(),
+              configuredDays: _configuredDaysCount(),
+              loadPercent: _loadPercent(),
+            ),
+            const SizedBox(height: 16),
+            const _BottomMockNavigationBar(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfiguredDayCard extends StatelessWidget {
+  final String dayName;
+  final String startTime;
+  final String endTime;
+  final String maxLateTime;
+  final VoidCallback onEdit;
+
+  const _ConfiguredDayCard({
+    required this.dayName,
+    required this.startTime,
+    required this.endTime,
+    required this.maxLateTime,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onEdit,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: const Border(
+              left: BorderSide(
+                width: 4,
+                color: ScheduleSettingsScreen.brandBlue,
+              ),
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x12000000),
+                blurRadius: 16,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          dayName,
+                          style: GoogleFonts.manrope(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: ScheduleSettingsScreen.outline,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: ScheduleSettingsScreen.secondaryFixed,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Configurado',
+                            style: GoogleFonts.manrope(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: ScheduleSettingsScreen.brandBlue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(
+                      Icons.edit,
+                      color: ScheduleSettingsScreen.brandBlue,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                '$startTime - $endTime',
+                style: GoogleFonts.manrope(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: ScheduleSettingsScreen.brandBlue,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Puntual hasta: $maxLateTime',
+                style: GoogleFonts.manrope(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: ScheduleSettingsScreen.outline,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnconfiguredDayCard extends StatelessWidget {
+  final String dayName;
+  final VoidCallback onAdd;
+
+  const _UnconfiguredDayCard({required this.dayName, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ScheduleSettingsScreen.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            dayName,
+            style: GoogleFonts.manrope(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: ScheduleSettingsScreen.outline,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Sin horario configurado',
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w600,
+              color: ScheduleSettingsScreen.outline,
+            ),
+          ),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onAdd,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ScheduleSettingsScreen.brandBlue,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text(
+                'Añadir',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeeklySummaryCard extends StatelessWidget {
+  final String hoursLabel;
+  final int configuredDays;
+  final int loadPercent;
+
+  const _WeeklySummaryCard({
+    required this.hoursLabel,
+    required this.configuredDays,
+    required this.loadPercent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: ScheduleSettingsScreen.brandBlue,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Resumen Semanal',
+            style: GoogleFonts.manrope(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hoursLabel,
+            style: GoogleFonts.manrope(
+              color: ScheduleSettingsScreen.secondaryFixed,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _SummaryItem(label: 'Días', value: '$configuredDays/7'),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SummaryItem(label: 'Carga', value: '$loadPercent%'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryItem extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _SummaryItem({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.manrope(
+              color: ScheduleSettingsScreen.secondaryFixed,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.manrope(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimePickerTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _TimePickerTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: ScheduleSettingsScreen.brandBlue),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: ScheduleSettingsScreen.outline,
+                  ),
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.manrope(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: ScheduleSettingsScreen.brandBlue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomMockNavigationBar extends StatelessWidget {
+  const _BottomMockNavigationBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final inactive = Colors.blueGrey.shade600;
+
+    Widget item({
+      required IconData icon,
+      required String label,
+      required bool active,
+    }) {
+      final color = active ? Colors.white : inactive;
+      return Container(
+        decoration: active
+            ? BoxDecoration(
+                color: ScheduleSettingsScreen.brandBlue,
+                borderRadius: BorderRadius.circular(12),
+              )
+            : null,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: color),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0x1A5F6470)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          item(icon: Icons.calendar_today, label: 'Horarios', active: true),
+          item(icon: Icons.qr_code_scanner, label: 'Asistencia', active: false),
+          item(icon: Icons.groups, label: 'Alumnos', active: false),
+          item(icon: Icons.assessment, label: 'Reportes', active: false),
+        ],
+      ),
+    );
   }
 }
 

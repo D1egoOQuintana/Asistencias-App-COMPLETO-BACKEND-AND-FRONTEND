@@ -28,8 +28,9 @@ class AttendanceProvider extends ChangeNotifier {
     if (_classroomId == classroomId &&
         _selectedDay.year == newDay.year &&
         _selectedDay.month == newDay.month &&
-        _selectedDay.day == newDay.day)
+        _selectedDay.day == newDay.day) {
       return;
+    }
 
     _classroomId = classroomId;
     _selectedDay = newDay;
@@ -78,12 +79,21 @@ class AttendanceProvider extends ChangeNotifier {
     String? studentName,
   }) async {
     if (_classroomId == null) return;
+    final now = DateTime.now();
+    final dayStart = DateTime(now.year, now.month, now.day);
+
+    if (_selectedDay.year != dayStart.year ||
+        _selectedDay.month != dayStart.month ||
+        _selectedDay.day != dayStart.day) {
+      _selectedDay = dayStart;
+    }
+
     await _repo.upsertEntryForDay(
       classroomId: _classroomId!,
       studentId: studentId,
       status: status,
       studentName: studentName,
-      when: _selectedDay,
+      when: now,
     );
   }
 

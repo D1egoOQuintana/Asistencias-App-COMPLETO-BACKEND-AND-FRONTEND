@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/auth_provider.dart';
@@ -10,7 +12,7 @@ import '../../theme/app_design_system.dart';
 import '../../models/classroom_model.dart';
 import '../../models/user_model.dart';
 import '../teacher/classrooms/teacher_classrooms_screen.dart';
-import '../teacher/attendance/quick_qr_attendance_screen.dart';
+import '../teacher/qr_attendance_realtime.dart';
 
 /// Pantalla de inicio mejorada con diseño profesional y responsivo
 class ImprovedHomeScreen extends StatefulWidget {
@@ -31,22 +33,29 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
 
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.user!;
+    final baseTheme = Theme.of(context);
+    final manropeTheme = baseTheme.textTheme.apply(
+      fontFamily: GoogleFonts.manrope().fontFamily,
+    );
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (user.role == UserRole.admin) ...[
-                _buildModernWelcomeHeader(context, user),
-                const SizedBox(height: 32),
-                _buildAdminDashboard(context),
-              ] else
-                _buildTeacherDashboard(context, user.uid),
-            ],
+    return Theme(
+      data: baseTheme.copyWith(textTheme: manropeTheme),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (user.role == UserRole.admin) ...[
+                  _buildModernWelcomeHeader(context, user),
+                  const SizedBox(height: 32),
+                  _buildAdminDashboard(context),
+                ] else
+                  _buildTeacherDashboard(context, user.uid),
+              ],
+            ),
           ),
         ),
       ),
@@ -339,20 +348,12 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                 .toList() ??
             [];
 
+        final user = Provider.of<AuthProvider>(context, listen: false).user!;
+        final firstName = user.fullName.trim().isEmpty
+            ? 'Docente'
+            : user.fullName.trim().split(' ').first;
         final now = DateTime.now();
         final weekdayKey = _getWeekdayKey(now.weekday);
-
-        final activeClassroom = classrooms.cast<ClassroomModel?>().firstWhere(
-          (classroom) =>
-              classroom != null &&
-              classroom.schedule != null &&
-              classroom.schedule!.containsKey(weekdayKey) &&
-              _isNowInsideClassroomSchedule(
-                now,
-                classroom.schedule![weekdayKey]!,
-              ),
-          orElse: () => null,
-        );
 
         final todaysScheduled = classrooms
             .where(
@@ -378,40 +379,548 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
               return aTime.compareTo(bTime);
             });
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildTeacherTopIntroCard(context),
-            const SizedBox(height: 24),
-            _buildTeacherActiveSessionCard(
-              context,
-              activeClassroom: activeClassroom,
-              totalStudents: classrooms.fold<int>(
-                0,
-                (total, classroom) => total + classroom.capacity,
-              ),
-            ),
-            const SizedBox(height: 24),
-            _buildTeacherPerformanceSection(
-              context,
-              totalScheduledToday: todaysScheduled.length,
-              totalClassrooms: classrooms.length,
-              upcomingCount: upcomingClassrooms.length,
-            ),
-            const SizedBox(height: 24),
-            _buildCenteredQrActionButton(context),
-            const SizedBox(height: 24),
-            _buildTeacherNextSessionsSection(
-              context,
-              upcomingClassrooms: upcomingClassrooms,
-              weekdayKey: weekdayKey,
-            ),
-          ],
+        final nextClassroom = upcomingClassrooms.isNotEmpty
+            ? upcomingClassrooms.first
+            : null;
+        final nextTime = nextClassroom == null
+            ? '--:--'
+            : nextClassroom.schedule?[weekdayKey]?.startTime ?? '--:--';
+
+        final hour = now.hour.toString().padLeft(2, '0');
+        final minute = now.minute.toString().padLeft(2, '0');
+
+        final greeting = now.hour < 12
+            ? 'Buenos días'
+            : now.hour < 18
+            ? 'Buenas tardes'
+            : 'Buenas noches';
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 760;
+            final metricWidth = isMobile
+                ? (constraints.maxWidth - 12) / 2
+                : (constraints.maxWidth - 36) / 4;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFCFE3FF)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1976D2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.school_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Asistencias',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0D47A1),
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD8E8FF),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          firstName.isEmpty ? 'D' : firstName[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Color(0xFF1976D2),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => _showLogoutDialog(context),
+                        borderRadius: BorderRadius.circular(999),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFFFECACA)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.logout_rounded,
+                                color: Color(0xFFDC2626),
+                                size: 18,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Salir',
+                                style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  '$greeting, $firstName!',
+                  style: TextStyle(
+                    fontSize: isMobile ? 34 : 44,
+                    height: 1.05,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF000D33),
+                    letterSpacing: -1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Tienes ${todaysScheduled.length} clases programadas para hoy.',
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: metricWidth,
+                      child: _buildTeacherBentoMetric(
+                        title: 'Aulas Totales',
+                        value: '${classrooms.length}',
+                        icon: Icons.hub,
+                      ),
+                    ),
+                    SizedBox(
+                      width: metricWidth,
+                      child: _buildTeacherBentoMetric(
+                        title: 'Activas Hoy',
+                        value: todaysScheduled.length.toString().padLeft(
+                          2,
+                          '0',
+                        ),
+                        icon: Icons.calendar_today,
+                        iconContainerColor: const Color(0xFFD8E8FF),
+                        iconColor: const Color(0xFF0D47A1),
+                      ),
+                    ),
+                    SizedBox(
+                      width: metricWidth,
+                      child: _buildTeacherBentoMetric(
+                        title: 'Hora Actual',
+                        value: '$hour:$minute',
+                        icon: Icons.schedule,
+                      ),
+                    ),
+                    SizedBox(
+                      width: metricWidth,
+                      child: _buildTeacherNextClassMetric(
+                        className: nextClassroom?.name ?? 'Sin clase',
+                        classTime: nextTime,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 30),
+                _buildTeacherCentralQrAction(context),
+                const SizedBox(height: 24),
+                _buildTeacherRecentScans(classrooms: classrooms),
+              ],
+            );
+          },
         );
       },
     );
   }
 
+  Widget _buildTeacherBentoMetric({
+    required String title,
+    required String value,
+    required IconData icon,
+    Color iconContainerColor = const Color(0xFFF1F5FF),
+    Color iconColor = const Color(0xFF1976D2),
+  }) {
+    return Container(
+      height: 156,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF000D33).withValues(alpha: 0.03),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title.toUpperCase(),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.8,
+            ),
+          ),
+          const Spacer(),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 34,
+                    color: Color(0xFF000D33),
+                    height: 1,
+                  ),
+                ),
+              ),
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: iconContainerColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Icon(icon, color: iconColor),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherNextClassMetric({
+    required String className,
+    required String classTime,
+  }) {
+    return Container(
+      height: 156,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1976D2), Color(0xFF0D47A1)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PRÓXIMA CLASE',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.84),
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            className,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 24,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            classTime,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.86),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherCentralQrAction(BuildContext context) {
+    return Center(
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: () {
+              Get.to(
+                () => const QRAttendanceRealtimeScreen(),
+                transition: Transition.fadeIn,
+                duration: const Duration(milliseconds: 170),
+              );
+            },
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF42A5F5), Color(0xFF1565C0)],
+                ),
+                border: Border.all(color: Colors.white, width: 8),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1976D2).withValues(alpha: 0.28),
+                    blurRadius: 48,
+                    offset: const Offset(0, 22),
+                  ),
+                ],
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.qr_code_scanner, color: Colors.white, size: 82),
+                  SizedBox(height: 10),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 28),
+                    child: Text(
+                      'ESCANEAR CÓDIGO QR',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          const SizedBox(
+            width: 340,
+            child: Text(
+              'Coloca el código QR del estudiante dentro del visor para registrar asistencia automática.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherRecentScans({required List<ClassroomModel> classrooms}) {
+    final classroomById = <String, ClassroomModel>{
+      for (final classroom in classrooms)
+        if (classroom.id != null) classroom.id!: classroom,
+    };
+    final classroomIds = classroomById.keys.toSet();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Recientes',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF000D33),
+                  fontSize: 20,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const TeacherClassroomsScreen(showAppBar: true),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'Ver Todo',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('attendance')
+                .where('date', isEqualTo: _getTodayString())
+                .orderBy('timestamp', descending: true)
+                .limit(20)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: CircularProgressIndicator(),
+                );
+              }
+
+              final docs = snapshot.data?.docs ?? const [];
+              final filtered = docs
+                  .where(
+                    (doc) => classroomIds.contains(
+                      (doc.data()['classroomId'] ?? '').toString(),
+                    ),
+                  )
+                  .take(3)
+                  .toList();
+
+              if (filtered.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Text(
+                    'Sin registros recientes por ahora.',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: filtered.map((doc) {
+                  final data = doc.data();
+                  final studentName = (data['studentName'] ?? 'Estudiante')
+                      .toString();
+                  final classroomId = (data['classroomId'] ?? '').toString();
+                  final classroom = classroomById[classroomId];
+                  final status = (data['status'] ?? 'present').toString();
+                  final statusLabel = status == 'late' ? 'Tarde' : 'Presente';
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Icon(
+                            Icons.person,
+                            color: Color(0xFF1976D2),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                studentName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                '${classroom?.name ?? 'Sin aula'} • ${classroom?.section ?? '-'}',
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD8E8FF),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            statusLabel.toUpperCase(),
+                            style: const TextStyle(
+                              color: Color(0xFF0D47A1),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ignore: unused_element
   Widget _buildTeacherTopIntroCard(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.user!;
@@ -493,6 +1002,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildTeacherActiveSessionCard(
     BuildContext context, {
     required ClassroomModel? activeClassroom,
@@ -643,12 +1153,10 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const QuickQRAttendanceScreen(),
-                                  ),
+                                Get.to(
+                                  () => const QRAttendanceRealtimeScreen(),
+                                  transition: Transition.fadeIn,
+                                  duration: const Duration(milliseconds: 170),
                                 );
                               },
                               style: ElevatedButton.styleFrom(
@@ -714,6 +1222,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildTeacherPerformanceSection(
     BuildContext context, {
     required int totalScheduledToday,
@@ -838,6 +1347,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildCenteredQrActionButton(BuildContext context) {
     return Center(
       child: ConstrainedBox(
@@ -846,11 +1356,10 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
           width: double.infinity,
           child: ElevatedButton.icon(
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const QuickQRAttendanceScreen(),
-                ),
+              Get.to(
+                () => const QRAttendanceRealtimeScreen(),
+                transition: Transition.fadeIn,
+                duration: const Duration(milliseconds: 170),
               );
             },
             icon: const Icon(Icons.qr_code_scanner, size: 24),
@@ -874,6 +1383,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildTeacherNextSessionsSection(
     BuildContext context, {
     required List<ClassroomModel> upcomingClassrooms,
@@ -1025,6 +1535,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     return map[weekday] ?? 'monday';
   }
 
+  // ignore: unused_element
   bool _isNowInsideClassroomSchedule(DateTime now, ClassSchedule schedule) {
     final start = _parseTimeOnDate(now, schedule.startTime);
     final end = _parseTimeOnDate(now, schedule.endTime);

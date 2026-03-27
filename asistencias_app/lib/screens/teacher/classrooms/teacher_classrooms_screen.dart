@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../models/classroom_model.dart';
 import '../../../theme/app_design_system.dart';
 import '../../../widgets/common/state_widgets.dart';
@@ -34,7 +35,45 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
   @override
   bool get wantKeepAlive => true;
 
-  void _openClassroomDetail(ClassroomModel classroom) {
+  void _openClassroomDetail(
+    ClassroomModel classroom, {
+    bool openScheduleSettings = false,
+  }) {
+    if (openScheduleSettings) {
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          settings: const RouteSettings(name: 'classroom-schedule-settings'),
+          transitionDuration: AppDesignSystem.durationFast,
+          reverseTransitionDuration: AppDesignSystem.durationFast,
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return ScheduleSettingsScreen(classroom: classroom);
+          },
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curvedAnimation = CurvedAnimation(
+              parent: animation,
+              curve: AppDesignSystem.curveSnappy,
+            );
+
+            final slideAnimation = Tween<Offset>(
+              begin: const Offset(0.15, 0),
+              end: Offset.zero,
+            ).animate(curvedAnimation);
+
+            final fadeAnimation = Tween<double>(
+              begin: 0.0,
+              end: 1.0,
+            ).animate(curvedAnimation);
+
+            return SlideTransition(
+              position: slideAnimation,
+              child: FadeTransition(opacity: fadeAnimation, child: child),
+            );
+          },
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).push(
       PageRouteBuilder(
         settings: const RouteSettings(name: 'classroom-detail'),
@@ -100,12 +139,20 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     return keys[date.weekday - 1];
   }
 
+  DateTime _parseTimeOnDate(DateTime date, String hhmm) {
+    final parts = hhmm.split(':');
+    final hour = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0;
+    final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
   ClassSchedule? _todaySchedule(ClassroomModel classroom) {
     final schedule = classroom.schedule;
     if (schedule == null || schedule.isEmpty) return null;
     return schedule[_weekdayKey(DateTime.now())] ?? schedule.values.first;
   }
 
+  // ignore: unused_element
   bool _isLiveNow(ClassroomModel classroom) {
     if (!classroom.isActive) return false;
     final schedule = _todaySchedule(classroom);
@@ -185,8 +232,9 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                       'Asistencias',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppDesignSystem.titleLarge(context).copyWith(
+                      style: GoogleFonts.manrope(
                         color: _brandBlue,
+                        fontSize: 24,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.4,
                         height: 1,
@@ -197,8 +245,9 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppDesignSystem.bodySmall(context).copyWith(
+                      style: GoogleFonts.manrope(
                         color: _outline,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.1,
                       ),
@@ -216,7 +265,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
   Widget _buildDashboardHeader(
     BuildContext context, {
     required String title,
-    required String subtitle,
+    required bool showLive,
   }) {
     return Padding(
       padding: AppDesignSystem.paddingSymmetric(
@@ -226,30 +275,71 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppDesignSystem.headlineLarge(context).copyWith(
-              color: _brandBlue,
-              fontSize: 40,
-              height: 0.95,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -1.4,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth;
+              final titleSize = maxWidth < 360
+                  ? 30.0
+                  : maxWidth < 420
+                  ? 34.0
+                  : 40.0;
+
+              return Text(
+                title,
+                softWrap: true,
+                style: GoogleFonts.manrope(
+                  color: _brandBlue,
+                  fontSize: titleSize,
+                  height: 1.05,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.9,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          if (showLive)
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _secondary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: _secondary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'En vivo ahora',
+                        style: GoogleFonts.manrope(
+                          color: _secondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-          SizedBox(height: AppDesignSystem.getSpaceSM(context)),
-          Text(
-            subtitle,
-            style: AppDesignSystem.bodyMedium(
-              context,
-            ).copyWith(color: _outline, fontWeight: FontWeight.w500),
-          ),
         ],
       ),
     );
   }
 
+  // ignore: unused_element
   Widget _buildLiveCard(BuildContext context, ClassroomModel classroom) {
     return Container(
       width: double.infinity,
@@ -390,7 +480,10 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                         ),
                       ),
                       OutlinedButton.icon(
-                        onPressed: () => _openClassroomDetail(classroom),
+                        onPressed: () => _openClassroomDetail(
+                          classroom,
+                          openScheduleSettings: true,
+                        ),
                         icon: const Icon(Icons.folder_open_rounded),
                         label: const Text('Recursos'),
                         style: OutlinedButton.styleFrom(
@@ -435,6 +528,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildScheduledCard(BuildContext context, ClassroomModel classroom) {
     return Container(
       padding: AppDesignSystem.paddingAll(context, AppDesignSystem.spaceLG),
@@ -561,7 +655,10 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: () => _openClassroomDetail(classroom),
+                  onPressed: () => _openClassroomDetail(
+                    classroom,
+                    openScheduleSettings: true,
+                  ),
                   icon: const Icon(Icons.description_outlined, size: 18),
                   label: const Text('Recursos'),
                   style: FilledButton.styleFrom(
@@ -581,6 +678,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     );
   }
 
+  // ignore: unused_element
   Widget _buildFinishedCard(BuildContext context, ClassroomModel classroom) {
     return Container(
       width: double.infinity,
@@ -725,9 +823,32 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
 
         final allClassrooms = _cachedClassrooms ?? [];
         final activeClassrooms = _sortedActive(allClassrooms);
-        final inactiveClassrooms = allClassrooms
-            .where((classroom) => !classroom.isActive)
+
+        final now = DateTime.now();
+        final weekdayKey = _weekdayKey(now);
+        final todaysClassrooms = activeClassrooms
+            .where(
+              (classroom) =>
+                  classroom.schedule != null &&
+                  classroom.schedule!.containsKey(weekdayKey),
+            )
             .toList();
+
+        final upcomingClassrooms =
+            todaysClassrooms.where((classroom) {
+              final schedule = classroom.schedule![weekdayKey]!;
+              return _parseTimeOnDate(now, schedule.startTime).isAfter(now);
+            }).toList()..sort((a, b) {
+              final aTime = _parseTimeOnDate(
+                now,
+                a.schedule![weekdayKey]!.startTime,
+              );
+              final bTime = _parseTimeOnDate(
+                now,
+                b.schedule![weekdayKey]!.startTime,
+              );
+              return aTime.compareTo(bTime);
+            });
 
         ClassroomModel? liveClassroom;
         for (final classroom in activeClassrooms) {
@@ -736,43 +857,25 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
             break;
           }
         }
-        liveClassroom ??= activeClassrooms.isNotEmpty
-            ? activeClassrooms.first
+
+        final nextClassroom = upcomingClassrooms.isNotEmpty
+            ? upcomingClassrooms.first
             : null;
 
-        final scheduledClassrooms = activeClassrooms
-            .where((classroom) => classroom.id != liveClassroom?.id)
-            .take(2)
+        final featuredClassroom =
+            liveClassroom ??
+            nextClassroom ??
+            (activeClassrooms.isNotEmpty ? activeClassrooms.first : null);
+
+        final gridClassrooms = activeClassrooms
+            .where((classroom) => classroom.id != featuredClassroom?.id)
+            .take(3)
             .toList();
-
-        final finishedClassroom = inactiveClassrooms.isNotEmpty
-            ? inactiveClassrooms.first
-            : null;
 
         return Column(
           children: [
             if (!widget.showAppBar)
-              _buildTopGlassBar(context, 'Centro de aulas'),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(bottom: 10),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: AppDesignSystem.getSpaceMD(context)),
-                  _buildDashboardHeader(
-                    context,
-                    title: 'Aulas',
-                    subtitle: 'Gestión de asistencia y recursos curriculares.',
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
+              _buildTopGlassBar(context, 'Gestión de aulas'),
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -782,106 +885,80 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                     end: Alignment.bottomCenter,
                   ),
                 ),
-                child: CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: AppDesignSystem.getSpaceMD(context),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDashboardHeader(
+                        context,
+                        title: 'Gestión de Aulas',
+                        showLive: featuredClassroom != null,
                       ),
-                    ),
-                    if (liveClassroom != null)
-                      SliverPadding(
-                        padding: AppDesignSystem.paddingSymmetric(
-                          context,
-                          horizontal: AppDesignSystem.spaceMD,
-                        ),
-                        sliver: SliverToBoxAdapter(
-                          child: _buildLiveCard(context, liveClassroom),
-                        ),
-                      ),
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: AppDesignSystem.getSpaceLG(context),
-                      ),
-                    ),
-                    if (scheduledClassrooms.isNotEmpty)
-                      SliverPadding(
-                        padding: AppDesignSystem.paddingSymmetric(
-                          context,
-                          horizontal: AppDesignSystem.spaceMD,
-                        ),
-                        sliver: SliverToBoxAdapter(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isCompact = constraints.maxWidth < 740;
-                              if (isCompact) {
-                                return Column(
-                                  children: [
-                                    for (
-                                      int i = 0;
-                                      i < scheduledClassrooms.length;
-                                      i++
-                                    ) ...[
-                                      _buildScheduledCard(
-                                        context,
-                                        scheduledClassrooms[i],
-                                      ),
-                                      if (i < scheduledClassrooms.length - 1)
-                                        SizedBox(
-                                          height: AppDesignSystem.getSpaceMD(
-                                            context,
-                                          ),
-                                        ),
-                                    ],
-                                  ],
-                                );
-                              }
+                      const SizedBox(height: 18),
+                      if (featuredClassroom != null) ...[
+                        const SizedBox(height: 12),
+                        _buildFeaturedClassHtmlCard(context, featuredClassroom),
+                        const SizedBox(height: 24),
+                      ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isCompact = constraints.maxWidth < 760;
+                          if (gridClassrooms.isEmpty) {
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: _outlineVariant.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: const Text(
+                                'No hay más aulas para mostrar.',
+                                style: TextStyle(
+                                  color: Color(0xFF5F6470),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }
 
-                              return Row(
-                                children: [
-                                  for (
-                                    int i = 0;
-                                    i < scheduledClassrooms.length;
-                                    i++
-                                  ) ...[
-                                    Expanded(
-                                      child: _buildScheduledCard(
-                                        context,
-                                        scheduledClassrooms[i],
-                                      ),
+                          if (isCompact) {
+                            return Column(
+                              children: [
+                                for (final classroom in gridClassrooms)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: _buildClassHtmlGridCard(
+                                      context,
+                                      classroom,
                                     ),
-                                    if (i < scheduledClassrooms.length - 1)
-                                      SizedBox(
-                                        width: AppDesignSystem.getSpaceMD(
-                                          context,
-                                        ),
-                                      ),
-                                  ],
-                                ],
-                              );
-                            },
-                          ),
-                        ),
+                                  ),
+                              ],
+                            );
+                          }
+
+                          return Wrap(
+                            spacing: 14,
+                            runSpacing: 14,
+                            children: [
+                              for (final classroom in gridClassrooms)
+                                SizedBox(
+                                  width: (constraints.maxWidth - 14) / 2,
+                                  child: _buildClassHtmlGridCard(
+                                    context,
+                                    classroom,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
-                    if (finishedClassroom != null)
-                      SliverPadding(
-                        padding: EdgeInsets.fromLTRB(
-                          AppDesignSystem.getSpaceMD(context),
-                          AppDesignSystem.getSpaceLG(context),
-                          AppDesignSystem.getSpaceMD(context),
-                          AppDesignSystem.getSpaceXL(context),
-                        ),
-                        sliver: SliverToBoxAdapter(
-                          child: _buildFinishedCard(context, finishedClassroom),
-                        ),
-                      )
-                    else
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: AppDesignSystem.getSpaceXL(context),
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -889,6 +966,346 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
         );
       },
     );
+  }
+
+  Widget _buildFeaturedClassHtmlCard(
+    BuildContext context,
+    ClassroomModel classroom,
+  ) {
+    final scheduleText = _scheduleCaption(classroom);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _secondary.withValues(alpha: 0.15)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000D33),
+            blurRadius: 40,
+            offset: Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Icon(
+              Icons.school_rounded,
+              color: _secondary.withValues(alpha: 0.2),
+              size: 84,
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 780;
+
+              final info = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Siguiente Clase',
+                    style: TextStyle(
+                      color: _secondary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatClassName(classroom),
+                    style: TextStyle(
+                      color: _darkPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: compact ? 38 : 42,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    classroom.name,
+                    style: const TextStyle(
+                      color: Color(0xFF5F6470),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 18,
+                    runSpacing: 8,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.schedule,
+                            color: _secondary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            scheduleText,
+                            style: const TextStyle(
+                              color: _darkPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.group, color: _secondary, size: 20),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${classroom.capacity} Alumnos',
+                            style: const TextStyle(
+                              color: _darkPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              );
+
+              final actions = Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _openClassroomDetail(classroom),
+                    icon: const Icon(Icons.how_to_reg),
+                    label: const Text('Asistencia'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _darkPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _openClassroomDetail(
+                      classroom,
+                      openScheduleSettings: true,
+                    ),
+                    icon: const Icon(Icons.folder_open),
+                    label: const Text('Recursos'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE6EBF2),
+                      foregroundColor: _darkPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [info, const SizedBox(height: 18), actions],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(flex: 4, child: info),
+                  const SizedBox(width: 18),
+                  Expanded(flex: 3, child: actions),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassHtmlGridCard(
+    BuildContext context,
+    ClassroomModel classroom,
+  ) {
+    final daysText = _classDaysLabel(classroom);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x10000D33),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F4F5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _cardIconForClass(classroom),
+                  color: _darkPrimary,
+                  size: 30,
+                ),
+              ),
+              const Spacer(),
+              Flexible(
+                child: Text(
+                  daysText,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: Color(0xFF5F6470),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            _formatClassName(classroom),
+            style: const TextStyle(
+              color: _darkPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 30,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${classroom.name} • Aula ${classroom.section}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF5F6470),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.schedule, color: _secondary, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _scheduleCaption(classroom),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _secondary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _openClassroomDetail(classroom),
+                  icon: const Icon(Icons.how_to_reg, size: 18),
+                  label: const Text('Asistencia'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _secondary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _openClassroomDetail(
+                    classroom,
+                    openScheduleSettings: true,
+                  ),
+                  icon: const Icon(Icons.folder, size: 18),
+                  label: const Text('Recursos'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF2F4F5),
+                    foregroundColor: _darkPrimary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _cardIconForClass(ClassroomModel classroom) {
+    final name = classroom.name.toLowerCase();
+    if (name.contains('mate') || name.contains('calc')) return Icons.functions;
+    if (name.contains('bio')) return Icons.biotech;
+    if (name.contains('hist')) return Icons.history_edu;
+    return Icons.menu_book_rounded;
+  }
+
+  String _classDaysLabel(ClassroomModel classroom) {
+    final schedule = classroom.schedule;
+    if (schedule == null || schedule.isEmpty) return 'Horario pendiente';
+
+    const labels = {
+      'monday': 'Lunes',
+      'tuesday': 'Martes',
+      'wednesday': 'Miércoles',
+      'thursday': 'Jueves',
+      'friday': 'Viernes',
+      'saturday': 'Sábado',
+      'sunday': 'Domingo',
+    };
+
+    final days = schedule.keys.map((k) => labels[k] ?? k).toList();
+    if (days.length <= 2) {
+      return days.join(', ');
+    }
+    return '${days.first}, ${days[1]}';
   }
 
   @override

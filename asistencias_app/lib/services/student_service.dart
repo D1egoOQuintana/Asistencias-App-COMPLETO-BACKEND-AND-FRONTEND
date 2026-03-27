@@ -46,7 +46,7 @@ class StudentService {
   static Future<Map<String, dynamic>> createStudent({
     required String firstName,
     required String lastName,
-    required String dni,
+    String? dni,
     required String classroomId,
     String? parentEmail,
     String? parentPhone,
@@ -58,17 +58,22 @@ class StudentService {
         return {'success': false, 'message': 'Usuario no autenticado'};
       }
 
-      // Verificar si ya existe un estudiante con el mismo DNI
-      final existingStudent = await _firestore
-          .collection('students')
-          .where('dni', isEqualTo: dni)
-          .get();
+      final normalizedDni = (dni ?? '').trim();
 
-      if (existingStudent.docs.isNotEmpty) {
-        return {
-          'success': false,
-          'message': 'Ya existe un estudiante con este DNI',
-        };
+      // Verificar duplicados solo cuando el DNI fue ingresado.
+      if (normalizedDni.isNotEmpty) {
+        final existingStudent = await _firestore
+            .collection('students')
+            .where('dni', isEqualTo: normalizedDni)
+            .limit(1)
+            .get();
+
+        if (existingStudent.docs.isNotEmpty) {
+          return {
+            'success': false,
+            'message': 'Ya existe un estudiante con este DNI',
+          };
+        }
       }
 
       // Formatear teléfono con +51
@@ -78,7 +83,7 @@ class StudentService {
       final student = StudentModel(
         firstName: firstName,
         lastName: lastName,
-        dni: dni,
+        dni: normalizedDni,
         qrCode: StudentModel.generateQRCode(),
         classroomId: classroomId,
         parentEmail: parentEmail,
@@ -168,19 +173,35 @@ class StudentService {
     required String studentId,
     required String firstName,
     required String lastName,
-    required String dni,
+    String? dni,
     required String classroomId,
     String? parentEmail,
     String? parentPhone,
   }) async {
     try {
+      final normalizedDni = (dni ?? '').trim();
+
+      // Evitar DNI duplicado al editar solo cuando hay valor.
+      if (normalizedDni.isNotEmpty) {
+        final existingStudent = await _firestore
+            .collection('students')
+            .where('dni', isEqualTo: normalizedDni)
+            .limit(2)
+            .get();
+
+        final duplicated = existingStudent.docs.any((d) => d.id != studentId);
+        if (duplicated) {
+          return false;
+        }
+      }
+
       // Formatear teléfono con +51
       final formattedPhone = formatPeruvianPhone(parentPhone);
       
       await _firestore.collection('students').doc(studentId).update({
         'firstName': firstName,
         'lastName': lastName,
-        'dni': dni,
+        'dni': normalizedDni,
         'classroomId': classroomId,
         'parentEmail': parentEmail,
         'parentPhone': formattedPhone,
