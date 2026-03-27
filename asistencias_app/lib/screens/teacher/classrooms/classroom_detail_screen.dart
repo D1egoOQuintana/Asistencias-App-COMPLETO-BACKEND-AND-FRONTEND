@@ -15,10 +15,7 @@ enum SortOrder { aToZ, zToA, newest, oldest }
 class ClassroomDetailScreen extends StatefulWidget {
   final ClassroomModel classroom;
 
-  const ClassroomDetailScreen({
-    super.key,
-    required this.classroom,
-  });
+  const ClassroomDetailScreen({super.key, required this.classroom});
 
   @override
   State<ClassroomDetailScreen> createState() => _ClassroomDetailScreenState();
@@ -1804,7 +1801,8 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
                         label: 'Hora de entrada',
                         value: _timeLabel(start),
                         icon: Icons.login_rounded,
-                        onTap: () => pickTime(start, (picked) => start = picked),
+                        onTap: () =>
+                            pickTime(start, (picked) => start = picked),
                       ),
                       const SizedBox(height: 10),
                       _TimePickerTile(
@@ -1972,62 +1970,64 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
             children: [
-            Text(
-              'Configuración de Horarios',
-              style: GoogleFonts.manrope(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: ScheduleSettingsScreen.brandBlue,
+              Text(
+                'Configuración de Horarios',
+                style: GoogleFonts.manrope(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: ScheduleSettingsScreen.brandBlue,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Define y gestiona los rangos operativos de la institución para el ciclo lectivo vigente.',
-              style: GoogleFonts.manrope(
-                fontSize: 15,
-                color: ScheduleSettingsScreen.outline,
-                fontWeight: FontWeight.w600,
+              const SizedBox(height: 8),
+              Text(
+                'Define y gestiona los rangos operativos de la institución para el ciclo lectivo vigente.',
+                style: GoogleFonts.manrope(
+                  fontSize: 15,
+                  color: ScheduleSettingsScreen.outline,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            GridView.builder(
-              itemCount: _weekDays.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: 182,
-              ),
-              itemBuilder: (context, index) {
-                final entry = _weekDays.entries.elementAt(index);
-                final schedule = _schedules[entry.key];
+              const SizedBox(height: 20),
+              GridView.builder(
+                itemCount: _weekDays.length,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  mainAxisExtent: 182,
+                ),
+                itemBuilder: (context, index) {
+                  final entry = _weekDays.entries.elementAt(index);
+                  final schedule = _schedules[entry.key];
 
-                if (schedule != null) {
-                  return _ConfiguredDayCard(
+                  if (schedule != null) {
+                    return _ConfiguredDayCard(
+                      dayName: entry.value,
+                      startTime: _formatHour(schedule['startTime'] ?? '08:00'),
+                      endTime: _formatHour(schedule['endTime'] ?? '17:00'),
+                      maxLateTime: _formatHour(
+                        schedule['maxLateTime'] ?? '08:15',
+                      ),
+                      onEdit: () => _editDaySchedule(entry.key, entry.value),
+                    );
+                  }
+
+                  return _UnconfiguredDayCard(
                     dayName: entry.value,
-                    startTime: _formatHour(schedule['startTime'] ?? '08:00'),
-                    endTime: _formatHour(schedule['endTime'] ?? '17:00'),
-                    maxLateTime: _formatHour(schedule['maxLateTime'] ?? '08:15'),
-                    onEdit: () => _editDaySchedule(entry.key, entry.value),
+                    onAdd: () => _editDaySchedule(entry.key, entry.value),
                   );
-                }
-
-                return _UnconfiguredDayCard(
-                  dayName: entry.value,
-                  onAdd: () => _editDaySchedule(entry.key, entry.value),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            _WeeklySummaryCard(
-              hoursLabel: _totalHoursLabel(),
-              configuredDays: _configuredDaysCount(),
-              loadPercent: _loadPercent(),
-            ),
-            const SizedBox(height: 16),
-            const _BottomMockNavigationBar(),
+                },
+              ),
+              const SizedBox(height: 16),
+              _WeeklySummaryCard(
+                hoursLabel: _totalHoursLabel(),
+                configuredDays: _configuredDaysCount(),
+                loadPercent: _loadPercent(),
+              ),
+              const SizedBox(height: 16),
+              const _BottomMockNavigationBar(),
             ],
           ),
         ),

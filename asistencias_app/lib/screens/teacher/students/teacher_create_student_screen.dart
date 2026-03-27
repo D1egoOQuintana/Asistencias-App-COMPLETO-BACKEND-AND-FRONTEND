@@ -7,17 +7,15 @@ import '../../../services/student_service.dart';
 class TeacherCreateStudentScreen extends StatefulWidget {
   final ClassroomModel classroom;
 
-  const TeacherCreateStudentScreen({
-    super.key,
-    required this.classroom,
-  });
+  const TeacherCreateStudentScreen({super.key, required this.classroom});
 
   @override
   State<TeacherCreateStudentScreen> createState() =>
       _TeacherCreateStudentScreenState();
 }
 
-class _TeacherCreateStudentScreenState extends State<TeacherCreateStudentScreen> {
+class _TeacherCreateStudentScreenState
+    extends State<TeacherCreateStudentScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
@@ -418,7 +416,10 @@ class _TeacherCreateStudentScreenState extends State<TeacherCreateStudentScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFF0059BB), width: 1.8),
+              borderSide: const BorderSide(
+                color: Color(0xFF0059BB),
+                width: 1.8,
+              ),
             ),
           ),
         ),

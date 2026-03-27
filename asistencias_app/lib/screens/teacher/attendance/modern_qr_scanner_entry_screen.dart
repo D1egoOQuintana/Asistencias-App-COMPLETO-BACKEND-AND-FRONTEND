@@ -15,7 +15,8 @@ class ModernQrScannerEntryScreen extends StatefulWidget {
       _ModernQrScannerEntryScreenState();
 }
 
-class _ModernQrScannerEntryScreenState extends State<ModernQrScannerEntryScreen> {
+class _ModernQrScannerEntryScreenState
+    extends State<ModernQrScannerEntryScreen> {
   bool _isLoading = true;
   bool _hasClassrooms = true;
   String? _error;
@@ -106,7 +107,9 @@ class _ModernQrScannerEntryScreenState extends State<ModernQrScannerEntryScreen>
     }
 
     try {
-      final snapshot = await TeacherService.getClassroomsByTeacher(user.uid).first;
+      final snapshot = await TeacherService.getClassroomsByTeacher(
+        user.uid,
+      ).first;
       final classrooms = snapshot.docs
           .map((doc) => ClassroomModel.fromFirestore(doc))
           .toList();
@@ -127,9 +130,7 @@ class _ModernQrScannerEntryScreenState extends State<ModernQrScannerEntryScreen>
       final selected = _pickBestClassroom(classrooms);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => QRAttendanceRealtimeScreen(
-            classroomId: selected.id!,
-          ),
+          builder: (_) => QRAttendanceRealtimeScreen(classroomId: selected.id!),
         ),
       );
     } catch (e) {
@@ -161,7 +162,11 @@ class _ModernQrScannerEntryScreenState extends State<ModernQrScannerEntryScreen>
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 44, color: Colors.red),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 44,
+                      color: Colors.red,
+                    ),
                     const SizedBox(height: 10),
                     Text(_error!, textAlign: TextAlign.center),
                   ],

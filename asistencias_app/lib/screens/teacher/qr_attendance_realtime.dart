@@ -204,10 +204,12 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
         if (decoded['type'] != null && decoded['type'] != 'student') {
           throw Exception('QR no corresponde a estudiante');
         }
-        studentId =
-            (decoded['id'] ?? decoded['studentId'] ?? '').toString().trim();
-        studentName =
-            (decoded['name'] ?? decoded['studentName'] ?? '').toString().trim();
+        studentId = (decoded['id'] ?? decoded['studentId'] ?? '')
+            .toString()
+            .trim();
+        studentName = (decoded['name'] ?? decoded['studentName'] ?? '')
+            .toString()
+            .trim();
         dni = (decoded['dni'] ?? '').toString().trim();
       }
     } catch (_) {
@@ -260,8 +262,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
         dni: parsed.dni,
       );
       final studentId = student?.id ?? parsed.studentId;
-      final studentName =
-          (parsed.studentName?.isNotEmpty ?? false)
+      final studentName = (parsed.studentName?.isNotEmpty ?? false)
           ? parsed.studentName!
           : (student?.fullName.isNotEmpty ?? false)
           ? student!.fullName
@@ -508,9 +509,13 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                                   Container(
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(22),
-                                      color: Colors.white.withValues(alpha: 0.04),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.04,
+                                      ),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.2),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.2,
+                                        ),
                                         width: 1.2,
                                       ),
                                     ),
@@ -547,14 +552,18 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                                     animation: _scanLineController,
                                     builder: (context, child) {
                                       return Positioned(
-                                        top: 12 +
-                                            (lineTravel * _scanLineController.value),
+                                        top:
+                                            12 +
+                                            (lineTravel *
+                                                _scanLineController.value),
                                         left: 20,
                                         right: 20,
                                         child: Container(
                                           height: 2,
                                           decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(20),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
                                             gradient: const LinearGradient(
                                               colors: [
                                                 Colors.transparent,
@@ -595,7 +604,9 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                     decoration: BoxDecoration(
                       color: const Color(0xFF09162B).withValues(alpha: 0.88),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.14),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.35),
@@ -618,7 +629,9 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: _lastScanColor.withValues(alpha: 0.6),
+                                    color: _lastScanColor.withValues(
+                                      alpha: 0.6,
+                                    ),
                                     blurRadius: 10,
                                   ),
                                 ],
@@ -786,7 +799,9 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                 radius: 24,
                 backgroundColor: const Color(0xFF1D2E4A),
                 child: Text(
-                  data.fullName.isNotEmpty ? data.fullName[0].toUpperCase() : '?',
+                  data.fullName.isNotEmpty
+                      ? data.fullName[0].toUpperCase()
+                      : '?',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
@@ -824,7 +839,10 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: statusBg,
                   borderRadius: BorderRadius.circular(999),
@@ -903,11 +921,7 @@ class _ParsedScanData {
   final String? studentName;
   final String? dni;
 
-  const _ParsedScanData({
-    required this.studentId,
-    this.studentName,
-    this.dni,
-  });
+  const _ParsedScanData({required this.studentId, this.studentName, this.dni});
 }
 
 class _ScannedStudentCardData {

@@ -9,35 +9,35 @@ class StudentService {
   /// Formatear teléfono peruano con +51
   static String? formatPeruvianPhone(String? phone) {
     if (phone == null || phone.trim().isEmpty) return null;
-    
+
     // Limpiar espacios y caracteres especiales
     String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
-    
+
     // Si ya tiene +51, devolverlo
     if (cleaned.startsWith('+51')) {
       return cleaned;
     }
-    
+
     // Si empieza con 51 (sin +), agregar +
     if (cleaned.startsWith('51') && cleaned.length == 11) {
       return '+$cleaned';
     }
-    
+
     // Si empieza con 9 y tiene 9 dígitos, agregar +51
     if (cleaned.startsWith('9') && cleaned.length == 9) {
       return '+51$cleaned';
     }
-    
+
     // Si no empieza con 9 pero tiene 9 dígitos, asumir que es peruano
     if (cleaned.length == 9) {
       return '+51$cleaned';
     }
-    
+
     // Si tiene otros formatos, intentar limpiar y agregar +51
     if (cleaned.length >= 8 && cleaned.length <= 10) {
       return '+51$cleaned';
     }
-    
+
     // Si no se puede formatear, devolver el original
     return phone;
   }
@@ -78,7 +78,7 @@ class StudentService {
 
       // Formatear teléfono con +51
       final formattedPhone = formatPeruvianPhone(parentPhone);
-      
+
       // Crear el estudiante
       final student = StudentModel(
         firstName: firstName,
@@ -197,7 +197,7 @@ class StudentService {
 
       // Formatear teléfono con +51
       final formattedPhone = formatPeruvianPhone(parentPhone);
-      
+
       await _firestore.collection('students').doc(studentId).update({
         'firstName': firstName,
         'lastName': lastName,
