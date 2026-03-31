@@ -99,6 +99,66 @@ class _ImprovedClassroomScreenState extends State<ImprovedClassroomScreen>
     });
   }
 
+  Future<void> _toggleClassroomStatus(ClassroomModel classroom) async {
+    final ok = classroom.isActive
+        ? await ClassroomService.deactivateClassroom(classroom.id!)
+        : await ClassroomService.reactivateClassroom(classroom.id!);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? classroom.isActive
+                    ? 'Aula desactivada correctamente'
+                    : 'Aula activada correctamente'
+              : 'No se pudo actualizar el estado del aula',
+        ),
+        backgroundColor: ok ? Colors.green : Colors.red,
+      ),
+    );
+  }
+
+  Future<void> _deleteClassroom(ClassroomModel classroom) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Eliminar aula'),
+          content: Text(
+            'El aula "${classroom.name}" se marcará como inactiva para conservar histórico. ¿Deseas continuar?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final ok = await ClassroomService.deactivateClassroom(classroom.id!);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Aula eliminada (inactiva) correctamente'
+              : 'No se pudo eliminar el aula',
+        ),
+        backgroundColor: ok ? Colors.green : Colors.red,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
@@ -631,25 +691,85 @@ class _ImprovedClassroomScreenState extends State<ImprovedClassroomScreen>
                                         ),
                                       ],
                                     ),
-                                    trailing: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: classroom.isActive
-                                            ? Colors.green
-                                            : Colors.red,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        classroom.isActive
-                                            ? 'ACTIVA'
-                                            : 'INACTIVA',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
+                                    trailing: PopupMenuButton<String>(
+                                      tooltip: 'Acciones del aula',
+                                      onSelected: (value) async {
+                                        if (value == 'toggle') {
+                                          await _toggleClassroomStatus(classroom);
+                                        } else if (value == 'delete') {
+                                          await _deleteClassroom(classroom);
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        PopupMenuItem<String>(
+                                          value: 'toggle',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                classroom.isActive
+                                                    ? Icons.block
+                                                    : Icons.check_circle,
+                                                size: 18,
+                                                color: classroom.isActive
+                                                    ? Colors.orange
+                                                    : Colors.green,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                classroom.isActive
+                                                    ? 'Desactivar'
+                                                    : 'Activar',
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem<String>(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.delete_outline,
+                                                size: 18,
+                                                color: Colors.red,
+                                              ),
+                                              SizedBox(width: 8),
+                                              Text('Eliminar'),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: classroom.isActive
+                                              ? Colors.green
+                                              : Colors.red,
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              classroom.isActive
+                                                  ? 'ACTIVA'
+                                                  : 'INACTIVA',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Icon(
+                                              Icons.expand_more,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),

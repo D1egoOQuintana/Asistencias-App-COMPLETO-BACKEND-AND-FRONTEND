@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../themes/app_themes.dart';
-import '../../widgets/animated_background.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,108 +11,420 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with TickerProviderStateMixin {
-  int _selectedSegment = 0; // 0 = Docente, 1 = Admin
-  UserRole get _currentRole =>
-      _selectedSegment == 0 ? UserRole.docente : UserRole.admin;
-  late AnimationController _scaleController;
+class _LoginScreenState extends State<LoginScreen> {
+  static const Color _brandBlue = Color(0xFF1976D2);
+  static const Color _surface = Color(0xFFF8FAFB);
+  static const Color _surfaceLow = Color(0xFFF2F4F5);
+  static const Color _outline = Color(0xFF5F6470);
+  static const Color _darkText = Color(0xFF0B1F3B);
 
-  @override
-  void initState() {
-    super.initState();
+  UserRole? _selectedRole;
 
-    // Animación suave para el formulario
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 250),
-      vsync: this,
-    );
-    // (no heavy per-frame animation needed here)
-
-    _scaleController.forward();
-  }
-
-  @override
-  void dispose() {
-    _scaleController.dispose();
-    super.dispose();
-  }
+  bool get _showRoleSelector => _selectedRole == null;
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final isSmallScreen = screenSize.width < 600;
-    final themeForRole = AppThemes.getThemeForRole(_currentRole);
-
-    return Theme(
-      data: themeForRole,
-      child: Scaffold(
-        resizeToAvoidBottomInset: true,
-        // OPTIMIZACIÓN: Usar animatedSize en lugar de reconstruir todo
-        body: AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: Stack(
-            children: [
-              // Fondo animado con burbujas. Pausar animaciones cuando el
-              // teclado esté visible para evitar jank al enfocarse en campos.
-              AnimatedBackground(
-                isDocenteMode: _selectedSegment == 0,
-                pauseAnimations: MediaQuery.of(context).viewInsets.bottom > 0,
-              ),
-
-              // Contenido del login
-              SafeArea(
-                child: Center(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isSmallScreen ? 20.0 : 32.0,
-                      vertical: 24.0,
+    return Scaffold(
+      backgroundColor: _surface,
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _brandBlue.withValues(alpha: 0.2)),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Logo/Icono
-                        _buildLogo(isSmallScreen),
-
-                        SizedBox(height: isSmallScreen ? 32 : 48),
-
-                        // iOS 13 Segment Control
-                        _buildIOS13SegmentControl(),
-
-                        SizedBox(height: isSmallScreen ? 24 : 32),
-
-                        // Formulario de login con animación
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          transitionBuilder: (widget, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position:
-                                    Tween<Offset>(
-                                      begin: const Offset(0.1, 0),
-                                      end: Offset.zero,
-                                    ).animate(
-                                      CurvedAnimation(
-                                        parent: animation,
-                                        curve: Curves.easeOut,
-                                      ),
-                                    ),
-                                child: widget,
-                              ),
-                            );
-                          },
-                          child: _ModernLoginForm(
-                            key: ValueKey(_selectedSegment),
-                            role: _currentRole,
+                    child: const Icon(
+                      Icons.school_rounded,
+                      color: _brandBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      'Asistencias App',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.manrope(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: _darkText,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 980),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 360),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0.02, 0),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
                           ),
-                        ),
-                      ],
+                        );
+                      },
+                      child: _showRoleSelector
+                          ? _buildIdentitySelector(context)
+                          : _buildRoleFormView(context),
                     ),
                   ),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIdentitySelector(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final titleSize = width < 360
+        ? 34.0
+        : width < 420
+        ? 40.0
+        : width < 900
+        ? 48.0
+        : 56.0;
+
+    return Column(
+      key: const ValueKey('selector'),
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'Bienvenido a',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.manrope(
+            fontSize: titleSize,
+            fontWeight: FontWeight.w800,
+            height: 1.0,
+            letterSpacing: -1,
+            color: _darkText,
+          ),
+        ),
+        Text(
+          'Asistencias App',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.manrope(
+            fontSize: titleSize,
+            fontWeight: FontWeight.w900,
+            height: 1.0,
+            letterSpacing: -1,
+            color: _brandBlue,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'Selecciona tu portal para continuar.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.workSans(
+              color: _outline,
+              fontSize: width < 420 ? 16 : 19,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(height: 26),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 860;
+            if (compact) {
+              return Column(
+                children: [
+                  _IdentityCard(
+                    title: 'Docente',
+                    subtitle:
+                        'Gestiona asistencias, estudiantes y progreso académico.',
+                    icon: Icons.school_rounded,
+                    isPrimary: false,
+                    onTap: () => _goToForm(UserRole.docente),
+                  ),
+                  const SizedBox(height: 14),
+                  _IdentityCard(
+                    title: 'Administrador',
+                    subtitle:
+                        'Supervisa la operación institucional y reportes globales.',
+                    icon: Icons.admin_panel_settings_rounded,
+                    isPrimary: true,
+                    onTap: () => _goToForm(UserRole.admin),
+                  ),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(
+                  child: _IdentityCard(
+                    title: 'Docente',
+                    subtitle:
+                        'Gestiona asistencias, estudiantes y progreso académico.',
+                    icon: Icons.school_rounded,
+                    isPrimary: false,
+                    onTap: () => _goToForm(UserRole.docente),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _IdentityCard(
+                    title: 'Administrador',
+                    subtitle:
+                        'Supervisa la operación institucional y reportes globales.',
+                    icon: Icons.admin_panel_settings_rounded,
+                    isPrimary: true,
+                    onTap: () => _goToForm(UserRole.admin),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 22),
+        Column(
+          children: [
+            Container(
+              width: 1,
+              height: 52,
+              color: _brandBlue.withValues(alpha: 0.35),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Gestión educativa con precisión',
+              style: GoogleFonts.workSans(
+                fontSize: 12,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+                color: _darkText,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleFormView(BuildContext context) {
+    final role = _selectedRole!;
+    final title = role == UserRole.docente
+        ? 'Ingreso de Docente'
+        : 'Ingreso de Administrador';
+    final subtitle = role == UserRole.docente
+        ? 'Accede a tu panel profesional para gestionar tus aulas.'
+        : 'Accede al panel institucional para administración global.';
+
+    return Column(
+      key: ValueKey('form-${role.value}'),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _backToSelector,
+            icon: const Icon(Icons.arrow_back_rounded),
+            label: const Text('Volver a selección'),
+            style: TextButton.styleFrom(
+              foregroundColor: _brandBlue,
+              textStyle: GoogleFonts.workSans(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: _brandBlue.withValues(alpha: 0.16)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: _brandBlue,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  role == UserRole.docente
+                      ? Icons.menu_book_rounded
+                      : Icons.verified_user_rounded,
+                  size: 42,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(
+                  fontSize: MediaQuery.of(context).size.width < 380 ? 30 : 38,
+                  color: _darkText,
+                  height: 1,
+                  letterSpacing: -0.8,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 540),
+                child: Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.workSans(
+                    color: _outline,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _ModernLoginForm(
+                key: ValueKey('role-form-${role.value}'),
+                role: role,
+                brandBlue: _brandBlue,
+                darkText: _darkText,
+                surfaceLow: _surfaceLow,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _goToForm(UserRole role) {
+    Provider.of<AuthProvider>(context, listen: false).clearError();
+    setState(() {
+      _selectedRole = role;
+    });
+  }
+
+  void _backToSelector() {
+    Provider.of<AuthProvider>(context, listen: false).clearError();
+    setState(() {
+      _selectedRole = null;
+    });
+  }
+}
+
+class _IdentityCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool isPrimary;
+  final VoidCallback onTap;
+
+  const _IdentityCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.isPrimary,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const brandBlue = Color(0xFF1976D2);
+    const darkText = Color(0xFF0B1F3B);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isPrimary ? brandBlue : Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isPrimary ? Colors.transparent : brandBlue.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isPrimary
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : const Color(0xFFE9F2FF),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  size: 42,
+                  color: isPrimary ? Colors.white : brandBlue,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: GoogleFonts.manrope(
+                  fontSize: 32,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                  color: isPrimary ? Colors.white : darkText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                style: GoogleFonts.workSans(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w500,
+                  color: isPrimary ? Colors.white.withValues(alpha: 0.88) : const Color(0xFF5F6470),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isPrimary ? 'Ingreso seguro' : 'Acceder al portal',
+                    style: GoogleFonts.workSans(
+                      fontSize: 12,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w700,
+                      color: isPrimary ? Colors.white : brandBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: isPrimary ? Colors.white : brandBlue,
+                  ),
+                ],
               ),
             ],
           ),
@@ -121,135 +432,22 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
-
-  Widget _buildLogo(bool isSmallScreen) {
-    return Hero(
-      tag: 'app_logo',
-      child: Container(
-        width: isSmallScreen ? 80 : 100,
-        height: isSmallScreen ? 80 : 100,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 20,
-              spreadRadius: 5,
-            ),
-          ],
-        ),
-        child: Icon(
-          Icons.school,
-          size: isSmallScreen ? 40 : 50,
-          color: AppThemes.getThemeForRole(_currentRole).primaryColor,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIOS13SegmentControl() {
-    final options = ['Docente', 'Admin'];
-    final icons = [Icons.person, Icons.admin_panel_settings];
-
-    return Container(
-      height: 44,
-      width: 320,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE2E2E9),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Stack(
-        children: [
-          // Paddle animado (fondo blanco que se mueve)
-          AnimatedAlign(
-            alignment: _selectedSegment == 0
-                ? Alignment.centerLeft
-                : Alignment.centerRight,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            child: FractionallySizedBox(
-              widthFactor: 0.5,
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 6,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Botones de selección (MEJORADO: cubre toda el área)
-          Row(
-            children: List.generate(options.length, (index) {
-              final isSelected = index == _selectedSegment;
-              return Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedSegment = index),
-                    borderRadius: BorderRadius.circular(10),
-                    splashColor: Colors.white.withValues(alpha: 0.2),
-                    highlightColor: Colors.white.withValues(alpha: 0.1),
-                    child: Container(
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 200),
-                        style: TextStyle(
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          fontSize: isSelected ? 15 : 14,
-                          color: isSelected
-                              ? AppThemes.getThemeForRole(
-                                  _currentRole,
-                                ).primaryColor
-                              : Colors.black54,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              icons[index],
-                              size: isSelected ? 18 : 16,
-                              color: isSelected
-                                  ? AppThemes.getThemeForRole(
-                                      _currentRole,
-                                    ).primaryColor
-                                  : Colors.black54,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(options[index]),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-/// Formulario de login moderno y responsivo optimizado
+/// Formulario de login moderno y responsivo.
 class _ModernLoginForm extends StatefulWidget {
   final UserRole role;
+  final Color brandBlue;
+  final Color darkText;
+  final Color surfaceLow;
 
-  const _ModernLoginForm({super.key, required this.role});
+  const _ModernLoginForm({
+    super.key,
+    required this.role,
+    required this.brandBlue,
+    required this.darkText,
+    required this.surfaceLow,
+  });
 
   @override
   State<_ModernLoginForm> createState() => _ModernLoginFormState();
@@ -259,22 +457,13 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _emailFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
   bool _obscurePassword = true;
-
-  @override
-  void initState() {
-    super.initState();
-    // No añadimos listeners que hagan setState en focus para evitar
-    // reconstrucciones costosas cuando el teclado aparece.
-  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _emailFocusNode.dispose();
     _passwordFocusNode.dispose();
     super.dispose();
   }
@@ -283,7 +472,6 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
     await authProvider.signIn(
       email: _emailController.text.trim(),
       password: _passwordController.text,
@@ -294,329 +482,218 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isSmallScreen = constraints.maxWidth < 400;
-            final cardPadding = isSmallScreen ? 20.0 : 32.0;
-            final verticalSpacing = isSmallScreen ? 16.0 : 20.0;
-
-            return Container(
-              constraints: BoxConstraints(
-                maxWidth: isSmallScreen ? constraints.maxWidth : 420,
-              ),
-              child: Card(
-                elevation: 12,
-                shadowColor: Colors.black.withValues(alpha: 0.15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+      builder: (context, authProvider, _) {
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildInputLabel('Correo electrónico'),
+                const SizedBox(height: 8),
+                _buildEmailField(),
+                const SizedBox(height: 18),
+                _buildInputLabel('Contraseña'),
+                const SizedBox(height: 8),
+                _buildPasswordField(),
+                const SizedBox(height: 14),
+                TextButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Esta función estará disponible pronto.'),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: widget.brandBlue,
+                    textStyle: GoogleFonts.workSans(fontWeight: FontWeight.w600),
+                  ),
+                  child: const Text('¿Olvidaste tu contraseña?'),
                 ),
-                child: Padding(
-                  padding: EdgeInsets.all(cardPadding),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Título elegante con gradiente
-                        ShaderMask(
-                          shaderCallback: (bounds) => LinearGradient(
-                            colors: AppThemes.getGradientForRole(widget.role),
-                          ).createShader(bounds),
-                          child: Text(
-                            'Bienvenido',
-                            style: TextStyle(
-                              fontSize: isSmallScreen ? 26 : 30,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Text(
-                          'Inicia sesión en tu cuenta',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Colors.grey[600],
-                                fontSize: isSmallScreen ? 14 : 15,
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-
-                        SizedBox(height: isSmallScreen ? 28 : 36),
-
-                        // Campo Email moderno
-                        _buildEmailField(isSmallScreen),
-
-                        SizedBox(height: verticalSpacing),
-
-                        // Campo Contraseña moderno
-                        _buildPasswordField(isSmallScreen),
-
-                        SizedBox(height: isSmallScreen ? 28 : 36),
-
-                        // Botón de login moderno
-                        _buildLoginButton(authProvider, isSmallScreen),
-
-                        // Mensaje de error elegante
-                        if (authProvider.errorMessage != null) ...[
-                          SizedBox(height: verticalSpacing),
-                          _buildErrorMessage(authProvider.errorMessage!),
-                        ],
-                      ],
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 58,
+                  child: ElevatedButton(
+                    onPressed: authProvider.isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      elevation: 0,
+                      backgroundColor: widget.brandBlue,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: widget.brandBlue.withValues(alpha: 0.6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
                     ),
+                    child: authProvider.isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Iniciar sesión',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded),
+                            ],
+                          ),
                   ),
                 ),
-              ),
-            );
-          },
+                if (authProvider.errorMessage != null) ...[
+                  const SizedBox(height: 14),
+                  _buildErrorMessage(authProvider.errorMessage!),
+                ],
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget _buildEmailField(bool isSmallScreen) {
-    return TextFormField(
-      controller: _emailController,
-      focusNode: _emailFocusNode,
-      keyboardType: TextInputType.emailAddress,
-      textInputAction: TextInputAction.next,
-      style: const TextStyle(fontSize: 15),
-      onFieldSubmitted: (_) {
-        FocusScope.of(context).requestFocus(_passwordFocusNode);
-      },
-      decoration: InputDecoration(
-        labelText: 'Correo electrónico',
-        hintText: 'ejemplo@escuela.com',
-        prefixIcon: Container(
-          margin: const EdgeInsets.all(12),
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppThemes.getThemeForRole(
-              widget.role,
-            ).primaryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            Icons.email_outlined,
-            color: AppThemes.getThemeForRole(widget.role).primaryColor,
-            size: 20,
-          ),
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        filled: true,
-        fillColor: Colors.grey[50],
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey[200]!, width: 2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: AppThemes.getThemeForRole(widget.role).primaryColor,
-            width: 2.5,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.red, width: 2),
-        ),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: isSmallScreen ? 16 : 20,
-          vertical: isSmallScreen ? 16 : 18,
+  Widget _buildInputLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        text,
+        style: GoogleFonts.workSans(
+          fontSize: 16,
+          color: widget.darkText,
+          fontWeight: FontWeight.w700,
         ),
       ),
+    );
+  }
+
+  Widget _buildEmailField() {
+    return TextFormField(
+      controller: _emailController,
+      keyboardType: TextInputType.emailAddress,
+      textInputAction: TextInputAction.next,
+      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocusNode),
+      style: GoogleFonts.workSans(fontSize: 16, fontWeight: FontWeight.w500),
+      decoration: _baseDecoration(
+        hint: 'nombre@institucion.edu',
+        icon: Icons.mail_outline_rounded,
+      ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'Por favor ingresa tu correo';
+        if (value == null || value.trim().isEmpty) {
+          return 'Ingresa tu correo electrónico.';
         }
-        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-          return 'Ingresa un correo válido';
+        if (!RegExp(r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+          return 'Ingresa un correo válido.';
         }
         return null;
       },
     );
   }
 
-  Widget _buildPasswordField(bool isSmallScreen) {
+  Widget _buildPasswordField() {
     return TextFormField(
       controller: _passwordController,
       focusNode: _passwordFocusNode,
       obscureText: _obscurePassword,
       textInputAction: TextInputAction.done,
-      style: const TextStyle(fontSize: 15),
       onFieldSubmitted: (_) => _handleLogin(),
-      decoration: InputDecoration(
-        labelText: 'Contraseña',
-        hintText: '••••••••',
-        prefixIcon: Container(
-          margin: const EdgeInsets.all(12),
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppThemes.getThemeForRole(
-              widget.role,
-            ).primaryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            Icons.lock_outline,
-            color: AppThemes.getThemeForRole(widget.role).primaryColor,
-            size: 20,
-          ),
-        ),
-        suffixIcon: IconButton(
+      style: GoogleFonts.workSans(fontSize: 16, fontWeight: FontWeight.w500),
+      decoration: _baseDecoration(
+        hint: '••••••••••',
+        icon: Icons.lock_outline_rounded,
+        suffix: IconButton(
+          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
           icon: Icon(
             _obscurePassword
                 ? Icons.visibility_outlined
                 : Icons.visibility_off_outlined,
-            color: Colors.grey[600],
-            size: 22,
+            color: const Color(0xFF5F6470),
           ),
-          onPressed: () {
-            setState(() {
-              _obscurePassword = !_obscurePassword;
-            });
-          },
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        filled: true,
-        fillColor: Colors.grey[50],
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey[200]!, width: 2),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: AppThemes.getThemeForRole(widget.role).primaryColor,
-            width: 2.5,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.red, width: 2),
-        ),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: isSmallScreen ? 16 : 20,
-          vertical: isSmallScreen ? 16 : 18,
         ),
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
-          return 'Por favor ingresa tu contraseña';
+          return 'Ingresa tu contraseña.';
         }
         if (value.length < 6) {
-          return 'La contraseña debe tener al menos 6 caracteres';
+          return 'La contraseña debe tener al menos 6 caracteres.';
         }
         return null;
       },
     );
   }
 
-  Widget _buildLoginButton(AuthProvider authProvider, bool isSmallScreen) {
-    return Container(
-      height: isSmallScreen ? 52 : 56,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: authProvider.isLoading
-              ? [Colors.grey[400]!, Colors.grey[400]!]
-              : AppThemes.getGradientForRole(widget.role),
-        ),
-        boxShadow: authProvider.isLoading
-            ? null
-            : [
-                BoxShadow(
-                  color: AppThemes.getThemeForRole(
-                    widget.role,
-                  ).primaryColor.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+  InputDecoration _baseDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffix,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: GoogleFonts.workSans(color: const Color(0xFF8B92A0)),
+      filled: true,
+      fillColor: widget.surfaceLow,
+      prefixIcon: Icon(icon, color: widget.brandBlue),
+      suffixIcon: suffix,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide.none,
       ),
-      child: ElevatedButton(
-        onPressed: authProvider.isLoading ? null : _handleLogin,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shadowColor: Colors.transparent,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        child: authProvider.isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Text(
-                'Iniciar Sesión',
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 16 : 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-              ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: widget.brandBlue.withValues(alpha: 0.12), width: 1.2),
       ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: widget.brandBlue, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: const BorderSide(color: Color(0xFFBA1A1A), width: 1.6),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(20),
+        borderSide: const BorderSide(color: Color(0xFFBA1A1A), width: 2),
+      ),
+      errorStyle: GoogleFonts.workSans(fontWeight: FontWeight.w600),
     );
   }
 
   Widget _buildErrorMessage(String message) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 300),
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.scale(
-            scale: value,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.shade200, width: 1.5),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: Colors.red.shade600,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: TextStyle(
-                        color: Colors.red.shade700,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFCACA)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: Color(0xFFBA1A1A)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.workSans(
+                color: const Color(0xFF8E1A1A),
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

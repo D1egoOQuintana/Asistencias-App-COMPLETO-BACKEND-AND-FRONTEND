@@ -9,6 +9,7 @@ import '../../models/classroom_model.dart';
 import '../../models/student_model.dart';
 import '../../providers/attendance_provider.dart';
 import '../../services/attendance_repository.dart';
+import 'attendance/attendance_corrections_screen.dart';
 
 /// Pantalla de registro por QR en tiempo real
 /// Integra con AttendanceProvider para actualizar la lista inmediatamente
@@ -149,30 +150,35 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     String? studentId,
     String? dni,
   }) async {
-    StudentModel? student;
+    try {
+      StudentModel? student;
 
-    if (studentId != null && studentId.trim().isNotEmpty) {
-      final byId = await FirebaseFirestore.instance
-          .collection('students')
-          .doc(studentId.trim())
-          .get();
-      if (byId.exists) {
-        student = StudentModel.fromFirestore(byId);
+      if (studentId != null && studentId.trim().isNotEmpty) {
+        final byId = await FirebaseFirestore.instance
+            .collection('students')
+            .doc(studentId.trim())
+            .get();
+        if (byId.exists) {
+          student = StudentModel.fromFirestore(byId);
+        }
       }
-    }
 
-    if (student == null && dni != null && dni.trim().isNotEmpty) {
-      final byDni = await FirebaseFirestore.instance
-          .collection('students')
-          .where('dni', isEqualTo: dni.trim())
-          .limit(1)
-          .get();
-      if (byDni.docs.isNotEmpty) {
-        student = StudentModel.fromFirestore(byDni.docs.first);
+      if (student == null && dni != null && dni.trim().isNotEmpty) {
+        final byDni = await FirebaseFirestore.instance
+            .collection('students')
+            .where('dni', isEqualTo: dni.trim())
+            .limit(1)
+            .get();
+        if (byDni.docs.isNotEmpty) {
+          student = StudentModel.fromFirestore(byDni.docs.first);
+        }
       }
-    }
 
-    return student;
+      return student;
+    } catch (_) {
+      // Si no hay permisos sobre students, el flujo QR sigue con los datos del QR.
+      return null;
+    }
   }
 
   String _statusText(AttendanceStatus status) {
@@ -193,7 +199,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     return '$h:$m:$s';
   }
 
-  _ParsedScanData _extractScanData(String raw) {
+  _ParsedScanData? _tryExtractScanData(String raw) {
     String? studentId;
     String? studentName;
     String? dni;
@@ -202,7 +208,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
         if (decoded['type'] != null && decoded['type'] != 'student') {
-          throw Exception('QR no corresponde a estudiante');
+          return null;
         }
         studentId = (decoded['id'] ?? decoded['studentId'] ?? '')
             .toString()
@@ -220,9 +226,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     studentName = studentName?.trim();
     dni = dni?.trim();
 
-    if (studentId == null || studentId.isEmpty) {
-      throw Exception('Código QR inválido');
-    }
+    if (studentId == null || studentId.isEmpty) return null;
 
     return _ParsedScanData(
       studentId: studentId,
@@ -237,8 +241,47 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     setState(() => _isTorchEnabled = !_isTorchEnabled);
   }
 
+  ClassroomModel? _selectedClassroomModel() {
+    final selectedId = _selectedClassroomId;
+    if (selectedId == null) return null;
+    for (final classroom in _classrooms) {
+      if (classroom.id == selectedId) {
+        return classroom;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openAttendanceCorrections() async {
+    final classroom = _selectedClassroomModel();
+    if (classroom == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un aula para abrir la lista de asistencia.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AttendanceCorrectionsScreen(
+          classroomId: classroom.id!,
+          classroomLabel: _classroomLabelById(classroom.id),
+        ),
+      ),
+    );
+  }
+
   Future<void> _processScan(String raw) async {
-    if (_selectedClassroomId == null || _isProcessingScan) return;
+    if (_selectedClassroomId == null || _isProcessingScan) {
+      return;
+    }
+
+    final parsed = _tryExtractScanData(raw);
+    if (parsed == null) return;
 
     final now = DateTime.now();
     if (_lastScanAt != null && _lastScanRaw == raw) {
@@ -256,7 +299,6 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     });
 
     try {
-      final parsed = _extractScanData(raw);
       final student = await _findStudentProfile(
         studentId: parsed.studentId,
         dni: parsed.dni,
@@ -272,16 +314,26 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
 
       if (!mounted) return;
 
-      await context.read<AttendanceProvider>().markAttendance(
+      final outcome = await context.read<AttendanceProvider>().registerQrScan(
         studentId: studentId.trim(),
         status: status,
         studentName: studentName,
       );
 
       if (!mounted) return;
+      final isExit = outcome == AttendanceScanOutcome.exitRegistered;
+      final alreadyExited =
+          outcome == AttendanceScanOutcome.exitAlreadyRegistered;
+
       setState(() {
-        _lastScanMessage = 'Registrado: $studentName';
-        _lastScanColor = const Color(0xFF35D38A);
+        _lastScanMessage = alreadyExited
+            ? 'Salida ya registrada: $studentName'
+            : isExit
+            ? 'Salida registrada: $studentName'
+            : 'Entrada registrada: $studentName';
+        _lastScanColor = alreadyExited
+            ? const Color(0xFFFFB74D)
+            : const Color(0xFF35D38A);
         _lastScannedStudent = _ScannedStudentCardData(
           fullName: studentName,
           studentId: studentId,
@@ -290,9 +342,17 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
           parentPhone: student?.parentPhone ?? 'No registrado',
           classroomLabel: _classroomLabelById(_selectedClassroomId),
           scannedAt: now,
-          statusLabel: _statusText(status),
-          success: true,
-          message: 'Asistencia registrada correctamente',
+          statusLabel: alreadyExited
+              ? 'YA SALIO'
+              : isExit
+              ? 'SALIDA'
+              : _statusText(status),
+          success: !alreadyExited,
+          message: alreadyExited
+              ? 'El estudiante ya tiene salida registrada hoy'
+              : isExit
+              ? 'Salida registrada correctamente'
+              : 'Entrada registrada correctamente',
         );
       });
     } catch (e) {
@@ -301,8 +361,10 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
         _lastScanMessage = 'Error: $e';
         _lastScanColor = Colors.red;
         _lastScannedStudent = _ScannedStudentCardData(
-          fullName: 'Estudiante no identificado',
-          studentId: '-',
+          fullName: parsed.studentName?.isNotEmpty == true
+              ? parsed.studentName!
+              : 'Estudiante no identificado',
+          studentId: parsed.studentId,
           dni: '-',
           parentEmail: '-',
           parentPhone: '-',
@@ -338,6 +400,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                 for (final barcode in capture.barcodes) {
                   final raw = barcode.rawValue;
                   if (raw == null || raw.isEmpty) continue;
+                  if (_tryExtractScanData(raw) == null) continue;
                   _processScan(raw);
                   return;
                 }
@@ -496,6 +559,24 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                             ),
                           ),
                         ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _openAttendanceCorrections,
+                          icon: const Icon(Icons.edit_note_rounded),
+                          label: const Text('Abrir pantalla de correccion'),
+                          style: ElevatedButton.styleFrom(
+                            elevation: 0,
+                            backgroundColor: const Color(0xFF2A3D59),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
                       const Spacer(),
                       IgnorePointer(
                         child: AspectRatio(

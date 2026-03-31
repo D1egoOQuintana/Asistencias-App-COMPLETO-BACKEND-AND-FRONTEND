@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../models/student_model.dart';
 
 class StudentService {
@@ -110,6 +111,38 @@ class StudentService {
       return {
         'success': false,
         'message': 'Error al crear estudiante: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Generar enlace de activación de Telegram para un estudiante
+  static Future<Map<String, dynamic>> generateTelegramActivationLink({
+    required String studentId,
+  }) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'createTelegramActivationLink',
+      );
+
+      final result = await callable.call(<String, dynamic>{
+        'studentId': studentId,
+      });
+
+      final data = Map<String, dynamic>.from(result.data as Map);
+      return {'success': true, ...data};
+    } on FirebaseFunctionsException catch (e) {
+      final code = e.code.toString();
+      final rawMessage = (e.message ?? '').trim();
+      return {
+        'success': false,
+        'message': rawMessage.isNotEmpty
+            ? '$rawMessage (code: $code)'
+            : 'No se pudo generar el enlace de activación (code: $code)',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error al generar enlace de activación: ${e.toString()}',
       };
     }
   }

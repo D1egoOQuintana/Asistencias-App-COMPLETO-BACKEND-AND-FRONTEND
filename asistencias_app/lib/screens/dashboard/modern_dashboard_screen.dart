@@ -3,12 +3,10 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../themes/app_themes.dart';
 import '../admin/teachers/teachers_management_screen.dart';
 import '../admin/students/improved_student_screen.dart';
 import '../admin/classrooms/improved_classroom_screen.dart';
 import '../teacher/classrooms/teacher_classrooms_screen.dart';
-import '../teacher/qr_attendance_realtime.dart';
 import '../teacher/students/teacher_students_screen.dart';
 import '../teacher/reports/teacher_reports_screen.dart';
 import 'improved_home_screen.dart';
@@ -24,7 +22,6 @@ class ModernDashboardScreen extends StatefulWidget {
 class _ModernDashboardScreenState extends State<ModernDashboardScreen>
     with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final RxInt _currentIndex = 0.obs;
-  late AnimationController _fabAnimationController;
   late final PageController _pageController;
   bool _isTabAnimating = false;
   bool _didPrecacheAssets = false;
@@ -32,7 +29,7 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
   // Cache de widgets para evitar reconstrucciones
   final Map<int, Widget> _screenCache = {};
 
-  static const Duration _tabTransitionDuration = Duration(milliseconds: 560);
+  static const Duration _tabTransitionDuration = Duration(milliseconds: 240);
 
   @override
   bool get wantKeepAlive => true;
@@ -40,12 +37,6 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
   @override
   void initState() {
     super.initState();
-
-    _fabAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _fabAnimationController.forward();
     _pageController = PageController(initialPage: _currentIndex.value);
 
     // Precalentar pantallas en background
@@ -97,7 +88,6 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
 
   @override
   void dispose() {
-    _fabAnimationController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -114,7 +104,7 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
         await _pageController.animateToPage(
           index,
           duration: _tabTransitionDuration,
-          curve: Curves.easeInOutCubic,
+          curve: Curves.easeOutCubic,
         );
       }
     } catch (_) {
@@ -140,29 +130,45 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
 
     final isTeacher = user.role == UserRole.docente;
     final isMobile = MediaQuery.of(context).size.width < 600;
+    const primaryColor = Color(0xFF1565C0);
 
-    // Definir iconos y pantallas según el rol (outline + filled)
-    final List<IconData> iconListOutline = isTeacher
-        ? [
-            Icons.home_outlined,
-            Icons.class_outlined,
-            Icons.people_outline,
-            Icons.assessment_outlined,
+    final List<NavigationDestination> destinations = isTeacher
+        ? const [
+            NavigationDestination(
+              icon: Icon(Icons.home_rounded, size: 24),
+              label: 'Inicio',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.class_rounded, size: 24),
+              label: 'Mis Aulas',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.group_rounded, size: 24),
+              label: 'Alumnos',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bar_chart_rounded, size: 24),
+              label: 'Reportes',
+            ),
           ]
-        : [
-            Icons.home_outlined,
-            Icons.people_outline,
-            Icons.school_outlined,
-            Icons.class_outlined,
+        : const [
+            NavigationDestination(
+              icon: Icon(Icons.home_rounded, size: 24),
+              label: 'Inicio',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_rounded, size: 24),
+              label: 'Docentes',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.school_rounded, size: 24),
+              label: 'Estudiantes',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.class_rounded, size: 24),
+              label: 'Aulas',
+            ),
           ];
-
-    final List<IconData> iconListFilled = isTeacher
-        ? [Icons.home, Icons.class_, Icons.people, Icons.assessment]
-        : [Icons.home, Icons.people, Icons.school, Icons.class_];
-
-    final List<String> labelList = isTeacher
-        ? ['Inicio', 'Mis Aulas', 'Alumnos', 'Reportes']
-        : ['Inicio', 'Docentes', 'Estudiantes', 'Aulas'];
 
     final screens = _getScreensForRole(user.role);
     final maxIndex = screens.length - 1;
@@ -195,105 +201,91 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
             .map((screen) => RepaintBoundary(child: screen))
             .toList(growable: false),
       ),
-      floatingActionButton:
-          isMobile && isTeacher && MediaQuery.of(context).viewInsets.bottom == 0
-          ? ScaleTransition(
-              scale: _fabAnimationController,
-              child: FloatingActionButton(
-                onPressed: () {
-                  Get.to(
-                    () => const QRAttendanceRealtimeScreen(),
-                    transition: Transition.fadeIn,
-                    duration: const Duration(milliseconds: 170),
-                  );
-                },
-                backgroundColor: AppThemes.getThemeForRole(
-                  user.role,
-                ).primaryColor,
-                child: const Icon(Icons.qr_code_scanner, color: Colors.white),
-              ),
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: isMobile
           ? _buildModernBottomNavBar(
-              iconListOutline: iconListOutline,
-              iconListFilled: iconListFilled,
-              labelList: labelList,
-              isTeacher: isTeacher,
-              primaryColor: AppThemes.getThemeForRole(user.role).primaryColor,
+              destinations: destinations,
+              primaryColor: primaryColor,
             )
           : null,
     );
   }
 
-  /// Barra de navegación inferior personalizada con estilo moderno
+  /// Barra de navegación inferior corporativa Material 3.
   Widget _buildModernBottomNavBar({
-    required List<IconData> iconListOutline,
-    required List<IconData> iconListFilled,
-    required List<String> labelList,
-    required bool isTeacher,
+    required List<NavigationDestination> destinations,
     required Color primaryColor,
   }) {
     return SafeArea(
+      top: false,
       child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(
-            top: BorderSide(
-              color: Colors.grey.withValues(alpha: 0.2),
-              width: 0.5,
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 8,
+              offset: Offset(0, -2),
             ),
-          ),
+          ],
         ),
-        child: SizedBox(
-          height: 65,
-          child: Row(
-            children: List.generate(
-              iconListOutline.length,
-              (index) => Expanded(
-                child: Material(
-                  color: Colors.transparent,
-                  child: Obx(
-                    () => InkWell(
+        child: Obx(
+          () => Row(
+            children: List.generate(destinations.length, (index) {
+              final destination = destinations[index];
+              final isSelected = _currentIndex.value == index;
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
                       onTap: () => _onTabTap(index),
-                      splashColor: primaryColor.withValues(alpha: 0.1),
-                      highlightColor: primaryColor.withValues(alpha: 0.05),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? primaryColor.withValues(alpha: 0.14)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected
+                                ? primaryColor.withValues(alpha: 0.32)
+                                : Colors.transparent,
+                          ),
+                        ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // Ícono
-                            Icon(
-                              _currentIndex.value == index
-                                  ? iconListFilled[index]
-                                  : iconListOutline[index],
-                              size: 26,
-                              color: _currentIndex.value == index
-                                  ? primaryColor
-                                  : const Color(0xFF6B7280),
+                            IconTheme(
+                              data: IconThemeData(
+                                size: 22,
+                                color: isSelected
+                                    ? primaryColor
+                                    : Colors.grey.shade500,
+                              ),
+                              child: destination.icon,
                             ),
                             const SizedBox(height: 4),
-                            // Texto
-                            Flexible(
-                              child: Text(
-                                labelList[index],
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: _currentIndex.value == index
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
-                                  color: _currentIndex.value == index
-                                      ? primaryColor
-                                      : const Color(0xFF6B7280),
-                                  height: 1.2,
-                                  letterSpacing: 0.1,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
+                            Text(
+                              destination.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: isSelected ? 12 : 11,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? primaryColor
+                                    : Colors.grey.shade600,
                               ),
                             ),
                           ],
@@ -302,8 +294,8 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            }),
           ),
         ),
       ),

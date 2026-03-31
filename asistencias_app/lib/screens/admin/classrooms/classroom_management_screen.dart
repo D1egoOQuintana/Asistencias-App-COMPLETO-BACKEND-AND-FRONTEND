@@ -5,6 +5,7 @@ import '../../../models/classroom_model.dart';
 import '../../../models/user_model.dart';
 import '../../../services/classroom_service.dart';
 import '../../../services/admin_service_new.dart';
+import '../../../services/academic_period_service.dart';
 
 class ClassroomManagementScreen extends StatefulWidget {
   const ClassroomManagementScreen({super.key});
@@ -26,8 +27,84 @@ class _ClassroomManagementScreenState extends State<ClassroomManagementScreen> {
   String? _selectedTeacherName;
   bool _isSearching = false;
   List<ClassroomModel> _searchResults = [];
+  String? _teacherFilterId;
+  String? _activePeriodId;
+  String _activePeriodLabel = 'Sin periodo activo';
+  bool _loadingPeriod = true;
   ClassroomModel? _editingClassroom;
   bool _isFormVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivePeriod();
+  }
+
+  Future<void> _loadActivePeriod() async {
+    setState(() => _loadingPeriod = true);
+    try {
+      final active = await AcademicPeriodService.ensureActivePeriod();
+      setState(() {
+        _activePeriodId = active['id']?.toString();
+        _activePeriodLabel =
+            '${active['name'] ?? active['year'] ?? 'Periodo activo'}';
+        _loadingPeriod = false;
+      });
+    } catch (_) {
+      setState(() => _loadingPeriod = false);
+    }
+  }
+
+  Future<void> _createNextPeriod() async {
+    final now = DateTime.now();
+    final nextYear = now.year + 1;
+    final created = await AcademicPeriodService.createNewPeriod(
+      name: nextYear.toString(),
+      year: nextYear,
+      startDate: DateTime(nextYear, 1, 1),
+      endDate: DateTime(nextYear, 12, 31, 23, 59, 59),
+      closeCurrent: false,
+    );
+
+    _showSnackBar('Nuevo periodo activo: ${created['name']}');
+    await _loadActivePeriod();
+  }
+
+  Future<void> _closeYear() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Cerrar año escolar'),
+          content: const Text(
+            'Se cerrará el periodo activo y se inactivarán sus aulas para conservar histórico. ¿Deseas continuar?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Cerrar año'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final ok = await AcademicPeriodService.closeActivePeriodAndArchiveClassrooms();
+    _showSnackBar(
+      ok
+          ? 'Periodo cerrado y aulas archivadas correctamente'
+          : 'No se pudo cerrar el periodo activo',
+      isError: !ok,
+    );
+
+    await _loadActivePeriod();
+  }
 
   @override
   void dispose() {
@@ -195,6 +272,61 @@ class _ClassroomManagementScreenState extends State<ClassroomManagementScreen> {
     );
   }
 
+  Future<void> _confirmDeleteClassroom(ClassroomModel classroom) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Eliminar aula'),
+          content: Text(
+            'El aula "${classroom.name}" se marcará como inactiva para conservar historial y asistencias. ¿Deseas continuar?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final success = await ClassroomService.deactivateClassroom(classroom.id!);
+    _showSnackBar(
+      success
+          ? 'Aula eliminada (inactiva) correctamente'
+          : 'No se pudo eliminar el aula',
+      isError: !success,
+    );
+  }
+
+  List<ClassroomModel> _applyTeacherFilter(List<ClassroomModel> classrooms) {
+    if (_teacherFilterId == null || _teacherFilterId!.isEmpty) {
+      return classrooms;
+    }
+    return classrooms
+        .where((c) => (c.teacherUid ?? '').trim() == _teacherFilterId)
+        .toList();
+  }
+
+  List<ClassroomModel> _applyPeriodFilter(List<ClassroomModel> classrooms) {
+    if (_activePeriodId == null || _activePeriodId!.isEmpty) {
+      return classrooms;
+    }
+
+    return classrooms.where((c) {
+      if ((c.periodId ?? '').trim().isEmpty) return true;
+      return c.periodId == _activePeriodId;
+    }).toList();
+  }
+
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -231,38 +363,122 @@ class _ClassroomManagementScreenState extends State<ClassroomManagementScreen> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Buscar por nombre, grado o sección...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F4F7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFD7DDE5)),
+                  ),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.calendar_month, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            _loadingPeriod
+                                ? 'Cargando periodo...'
+                                : 'Periodo activo: $_activePeriodLabel',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                      OutlinedButton.icon(
+                        onPressed: _createNextPeriod,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Nuevo periodo'),
                       ),
-                    ),
-                    onChanged: (_) => _searchClassrooms(),
+                      FilledButton.icon(
+                        onPressed: _closeYear,
+                        icon: const Icon(Icons.lock_clock),
+                        label: const Text('Cerrar año'),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: _showCreateForm,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nuevo'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF424242),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar por nombre, grado o sección...',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onChanged: (_) => _searchClassrooms(),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _showCreateForm,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Nuevo'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF424242),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                StreamBuilder<QuerySnapshot>(
+                  stream: AdminService.getTeachersStream(),
+                  builder: (context, snapshot) {
+                    final teachers = snapshot.data?.docs ?? const [];
+                    return DropdownButtonFormField<String>(
+                      initialValue: _teacherFilterId,
+                      decoration: InputDecoration(
+                        labelText: 'Filtrar aulas por profesor',
+                        prefixIcon: const Icon(Icons.person_search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Todos los profesores'),
+                        ),
+                        ...teachers.map((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final teacher = UserModel.fromFirestore(doc.id, data);
+                          return DropdownMenuItem<String>(
+                            value: doc.id,
+                            child: Text(teacher.fullName),
+                          );
+                        }),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _teacherFilterId = value;
+                        });
+                      },
+                    );
+                  },
                 ),
               ],
             ),
@@ -470,10 +686,13 @@ class _ClassroomManagementScreenState extends State<ClassroomManagementScreen> {
 
     if (_searchController.text.trim().isNotEmpty) {
       // Mostrar resultados de búsqueda
-      if (_searchResults.isEmpty) {
+      final filteredSearch = _applyTeacherFilter(
+        _applyPeriodFilter(_searchResults),
+      );
+      if (filteredSearch.isEmpty) {
         return const Center(child: Text('No se encontraron salones'));
       }
-      return _buildClassroomsGrid(_searchResults);
+      return _buildClassroomsGrid(filteredSearch);
     }
 
     // Mostrar todos los salones
@@ -491,8 +710,15 @@ class _ClassroomManagementScreenState extends State<ClassroomManagementScreen> {
         final classrooms = snapshot.data!.docs
             .map((doc) => ClassroomModel.fromFirestore(doc))
             .toList();
+        final filtered = _applyTeacherFilter(_applyPeriodFilter(classrooms));
 
-        return _buildClassroomsGrid(classrooms);
+        if (filtered.isEmpty) {
+          return const Center(
+            child: Text('No hay aulas para el profesor seleccionado'),
+          );
+        }
+
+        return _buildClassroomsGrid(filtered);
       },
     );
   }
@@ -622,6 +848,14 @@ class _ClassroomManagementScreenState extends State<ClassroomManagementScreen> {
                     size: 16,
                   ),
                   label: Text(classroom.isActive ? 'Desactivar' : 'Activar'),
+                ),
+                TextButton.icon(
+                  onPressed: classroom.id == null
+                      ? null
+                      : () => _confirmDeleteClassroom(classroom),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text('Eliminar'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
                 ),
               ],
             ),

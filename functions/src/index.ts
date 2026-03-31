@@ -1006,4 +1006,13 @@ export const api = onRequest({
 }, createApp());
 
 // Export de funciones de Telegram
-export { sendTelegramNotification, sendTelegramNotificationLegacy, handleTelegramWebhook } from './telegram';
+export {
+  sendTelegramNotification,
+  sendTelegramNotificationLegacy,
+  sendTelegramNotificationClassroomScoped,
+  sendTelegramAttendanceEventNotification,
+  handleTelegramWebhook,
+  createTelegramActivationLink,
+} from './telegram';
+
+export { syncClassroomAttendanceToRoot } from './attendance-sync';

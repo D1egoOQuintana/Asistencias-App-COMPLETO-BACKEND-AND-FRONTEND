@@ -4,7 +4,7 @@
  */
 
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { onRequest } from 'firebase-functions/v2/https';
+import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import axios from 'axios';
 
@@ -12,11 +12,39 @@ import axios from 'axios';
 const db = getFirestore();
 
 // TOKEN del bot de Telegram
-const BOT_TOKEN = '8305613209:AAFxld-nM5Qwe5Rs1TTDEbyXHOdu2Vg_NQw';
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8305613209:AAFxld-nM5Qwe5Rs1TTDEbyXHOdu2Vg_NQw';
+const BOT_USERNAME_FALLBACK = process.env.TELEGRAM_BOT_USERNAME || 'mi_bot_asistencia';
+let cachedBotUsername: string | null = null;
 
 // Función para generar código aleatorio de 6 dígitos
 function generateLinkingCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function getBotUsername(): Promise<string> {
+  if (cachedBotUsername) return cachedBotUsername;
+
+  try {
+    const resp = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`);
+    const username = resp?.data?.result?.username;
+    if (typeof username === 'string' && username.trim().length > 0) {
+      cachedBotUsername = username.trim();
+      return cachedBotUsername;
+    }
+  } catch (e) {
+    console.warn('No se pudo obtener username del bot por getMe, usando fallback:', e);
+  }
+
+  cachedBotUsername = BOT_USERNAME_FALLBACK;
+  return cachedBotUsername;
+}
+
+function buildTelegramStartLink(botUsername: string, code: string): string {
+  return `https://t.me/${botUsername}?start=${code}`;
+}
+
+function createWhatsappActivationMessage(studentName: string, startLink: string): string {
+  return `Hola, su link de activacion para: ${studentName}\n${startLink}\nCon este enlace se vincula al bot sin escribir nada.`;
 }
 
 // Logging simple en Firestore para diagnóstico
@@ -137,6 +165,113 @@ async function findStudentById(studentId: string) {
   return null;
 }
 
+async function getUserRole(uid: string, roleHint?: string): Promise<string> {
+  const userDoc = await db.collection('users').doc(uid).get();
+  const userData = userDoc.data() || {};
+  return String(userData.role || roleHint || '');
+}
+
+async function userCanManageStudent(
+  uid: string,
+  studentData: any,
+  roleHint?: string,
+): Promise<boolean> {
+  const role = await getUserRole(uid, roleHint);
+  if (role === 'admin') return true;
+  if (role !== 'docente' && role !== 'teacher') return false;
+
+  const classroomId = studentData?.classroomId;
+  if (!classroomId) return false;
+
+  const classroomDoc = await db.collection('classrooms').doc(String(classroomId)).get();
+  if (!classroomDoc.exists) return false;
+
+  const classroomData = classroomDoc.data() || {};
+  const teacherUid = String(classroomData.teacherUid || '').trim();
+  const teacherId = String(classroomData.teacherId || '').trim();
+  const ownerUid = String(classroomData.ownerUid || '').trim();
+  return teacherUid === uid || teacherId === uid || ownerUid === uid;
+}
+
+async function invalidatePreviousActivationCodes(studentId: string) {
+  const prevCodes = await db
+    .collection('activation_codes')
+    .where('studentId', '==', studentId)
+    .where('used', '==', false)
+    .limit(20)
+    .get();
+
+  const now = new Date();
+  for (const doc of prevCodes.docs) {
+    await doc.ref.update({
+      used: true,
+      usedAt: now,
+      deactivatedBy: 'regenerated',
+    });
+  }
+}
+
+export const createTelegramActivationLink = onCall({
+  memory: '256MiB',
+  timeoutSeconds: 30,
+  maxInstances: 5,
+}, async (request) => {
+  const uid = request.auth?.uid;
+  const roleHint = String(request.auth?.token?.role || '').trim();
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Usuario no autenticado');
+  }
+
+  const studentId = String(request.data?.studentId || '').trim();
+  if (!studentId) {
+    throw new HttpsError('invalid-argument', 'studentId es requerido');
+  }
+
+  const studentSnap = await db.collection('students').doc(studentId).get();
+  if (!studentSnap.exists) {
+    throw new HttpsError('not-found', 'Estudiante no encontrado');
+  }
+
+  const studentData: any = studentSnap.data() || {};
+  const canManage = await userCanManageStudent(uid, studentData, roleHint);
+  if (!canManage) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para generar el link de este estudiante');
+  }
+
+  await invalidatePreviousActivationCodes(studentId);
+
+  const activationCode = generateLinkingCode();
+  const studentName = getStudentDisplayName(studentData);
+  const parentPhone = getParentPhone(studentData);
+  const parentPhoneDigits = toDigits(parentPhone);
+  const parentPhoneE164 = toE164Peru(parentPhone);
+  const botUsername = await getBotUsername();
+  const startLink = buildTelegramStartLink(botUsername, activationCode);
+
+  await db.collection('activation_codes').add({
+    code: activationCode,
+    studentId,
+    studentName,
+    parentPhone,
+    parentPhoneDigits,
+    parentPhoneE164,
+    createdAt: new Date(),
+    used: false,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    generatedByUid: uid,
+    source: 'manual-link',
+  });
+
+  return {
+    success: true,
+    studentName,
+    activationCode,
+    botUsername,
+    startLink,
+    whatsappMessage: createWhatsappActivationMessage(studentName, startLink),
+  };
+});
+
 async function processAttendanceEvent(event: any) {
   console.log('🚀 INICIANDO TRIGGER TELEGRAM - Documento ID:', event.params.docId);
   try {
@@ -153,12 +288,22 @@ async function processAttendanceEvent(event: any) {
     await logTelegramEvent({
       type: 'trigger.start',
       docId: event.params.docId,
-      collection: event?.topic ? undefined : 'asistencias/attendance',
+      collection: event?.topic ? undefined : (
+        event?.params?.classroomId
+          ? `classrooms/${event.params.classroomId}/attendance`
+          : 'asistencias/attendance'
+      ),
       attendanceKeys: attendanceData ? Object.keys(attendanceData) : [],
     });
     if (!attendanceData) {
       console.log('❌ No hay datos de asistencia');
       await logTelegramEvent({ type: 'trigger.noData', docId: event.params.docId });
+      return;
+    }
+
+    if (attendanceData.eventDriven === true) {
+      console.log('⏭️ Registro event-driven detectado; se delega al trigger de attendance_events.');
+      await logTelegramEvent({ type: 'skip.eventDriven', docId: event.params.docId });
       return;
     }
 
@@ -198,7 +343,7 @@ async function processAttendanceEvent(event: any) {
     }
     // Compatibilidad: studentId (nuevo) o idAlumno (backend actual)
     const studentId = attendanceData.studentId || attendanceData.idAlumno;
-    const classroomId = attendanceData.classroomId || attendanceData.idCurso;
+    const classroomId = attendanceData.classroomId || attendanceData.idCurso || event?.params?.classroomId;
     if (!studentId) {
       console.log('❌ No hay studentId/idAlumno en los datos de asistencia');
       await logTelegramEvent({ type: 'trigger.noStudentId', docId: event.params.docId });
@@ -240,6 +385,130 @@ async function processAttendanceEvent(event: any) {
   }
 }
 
+async function processAttendanceEventNotification(event: any) {
+  try {
+    const snap = event.data;
+    if (!snap?.exists) {
+      await logTelegramEvent({
+        type: 'events.skip.deleted',
+        eventId: event.params?.eventId,
+        classroomId: event.params?.classroomId,
+      });
+      return;
+    }
+
+    const attendanceData = snap.data() || {};
+    const eventType = String(attendanceData.eventType || '').toLowerCase();
+    if (eventType != 'entry' && eventType != 'exit') {
+      await logTelegramEvent({
+        type: 'events.skip.invalidType',
+        eventId: event.params?.eventId,
+        classroomId: event.params?.classroomId,
+        eventType,
+      });
+      return;
+    }
+
+    const studentId = attendanceData.studentId || attendanceData.idAlumno;
+    if (!studentId) {
+      await logTelegramEvent({
+        type: 'events.skip.noStudentId',
+        eventId: event.params?.eventId,
+        classroomId: event.params?.classroomId,
+      });
+      return;
+    }
+
+    const studentLookup = await findStudentById(studentId);
+    if (!studentLookup) {
+      await logTelegramEvent({
+        type: 'events.skip.studentNotFound',
+        eventId: event.params?.eventId,
+        classroomId: event.params?.classroomId,
+        studentId,
+      });
+      return;
+    }
+
+    const student = studentLookup.data;
+    const studentRef = studentLookup.ref;
+
+    const eventAtRaw = attendanceData.eventAt?.toDate
+      ? attendanceData.eventAt.toDate()
+      : attendanceData.eventAt;
+    const eventDate = eventAtRaw ? new Date(eventAtRaw) : getAttendanceDate(attendanceData);
+    const dayKey = getDayKeyLima(eventDate);
+    const notificationEventKey = `${dayKey}_${eventType}`;
+
+    if ((student as any)?.lastTelegramNotifiedEventKeys?.[notificationEventKey] == true) {
+      await logTelegramEvent({
+        type: 'events.skip.alreadyNotified',
+        eventId: event.params?.eventId,
+        classroomId: event.params?.classroomId,
+        studentId,
+        notificationEventKey,
+      });
+      return;
+    }
+
+    if (!student?.parentTelegramChatId) {
+      if (eventType == 'entry') {
+        await sendActivationCode(
+          { ...student, _id: studentRef.id },
+          {
+            ...attendanceData,
+            studentId,
+            classroomId: attendanceData.classroomId || event.params?.classroomId,
+            entryAt: attendanceData.eventAt || attendanceData.entryAt || attendanceData.fechaHora,
+          }
+        );
+      } else {
+        await logTelegramEvent({
+          type: 'events.skip.exitWithoutLinkedChat',
+          eventId: event.params?.eventId,
+          classroomId: event.params?.classroomId,
+          studentId,
+        });
+      }
+    } else {
+      await sendRegularNotification(
+        { ...student, _id: studentRef.id },
+        {
+          ...attendanceData,
+          studentId,
+          classroomId: attendanceData.classroomId || event.params?.classroomId,
+          entryAt: attendanceData.eventAt || attendanceData.entryAt || attendanceData.fechaHora,
+        },
+        eventType,
+      );
+    }
+
+    await studentRef.set({
+      lastTelegramNotifiedDayKey: dayKey,
+      lastTelegramNotifiedEventKeys: {
+        [notificationEventKey]: true,
+      },
+    }, { merge: true });
+
+    await logTelegramEvent({
+      type: 'events.notified',
+      eventId: event.params?.eventId,
+      classroomId: event.params?.classroomId,
+      studentId,
+      eventType,
+      notificationEventKey,
+    });
+  } catch (error) {
+    console.error('Error enviando notificación por attendance_events:', error);
+    await logTelegramEvent({
+      type: 'events.error',
+      eventId: event.params?.eventId,
+      classroomId: event.params?.classroomId,
+      error: String(error),
+    });
+  }
+}
+
 // Función que se ejecuta automáticamente cuando se crea o modifica una asistencia (colección principal)
 export const sendTelegramNotification = onDocumentWritten({
   document: 'asistencias/{docId}',
@@ -254,6 +523,22 @@ export const sendTelegramNotification = onDocumentWritten({
 export const sendTelegramNotificationLegacy = onDocumentWritten('attendance/{docId}', async (event) => {
   await processAttendanceEvent(event);
 });
+
+// Trigger adicional para asistencias guardadas por aula (scanner QR en tiempo real)
+export const sendTelegramNotificationClassroomScoped = onDocumentWritten(
+  'classrooms/{classroomId}/attendance/{docId}',
+  async (event) => {
+    await processAttendanceEvent(event);
+  }
+);
+
+// Trigger principal para notificaciones por eventos entrada/salida
+export const sendTelegramAttendanceEventNotification = onDocumentCreated(
+  'classrooms/{classroomId}/attendance_events/{eventId}',
+  async (event) => {
+    await processAttendanceEventNotification(event);
+  }
+);
 
 // 🆕 Función para enviar código de activación (PRIMERA VEZ)
 async function sendActivationCode(student: any, attendanceData: any) {
@@ -398,7 +683,11 @@ async function sendActivationCode(student: any, attendanceData: any) {
 }
 
 // 🔁 Función para notificación normal (SIGUIENTES VECES)
-async function sendRegularNotification(student: any, attendanceData: any) {
+async function sendRegularNotification(
+  student: any,
+  attendanceData: any,
+  eventType: 'entry' | 'exit' = 'entry',
+) {
   try {
     const studentName = getStudentDisplayName(student);
     let classroomName = 'No especificada';
@@ -415,14 +704,15 @@ async function sendRegularNotification(student: any, attendanceData: any) {
     }
     
   const { dateStr, timeStr } = formatAttendanceDateTime(attendanceData);
-  const message = `🎓 *Asistencia Registrada*
+  const isExit = eventType === 'exit';
+  const message = `${isExit ? '🏁 *Salida Registrada*' : '🎓 *Asistencia Registrada*'}
 
 👨‍🎓 *Estudiante:* ${studentName}
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
 ⏰ *Hora:* ${timeStr}
 
-✅ Su hijo(a) ha registrado asistencia exitosamente.`;
+${isExit ? '✅ Su hijo(a) ha registrado salida exitosamente.' : '✅ Su hijo(a) ha registrado asistencia exitosamente.'}`;
     
     await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       chat_id: student.parentTelegramChatId,
@@ -450,7 +740,16 @@ export const handleTelegramWebhook = onRequest(async (request, response) => {
       const firstName = body.message.from.first_name || 'Usuario';
       const contact = body.message.contact;
       
-        if (text === '/start' || text === 'start') {
+      if (text && (text.toLowerCase().startsWith('/start') || text.toLowerCase() === 'start')) {
+        const payload = text.split(/\s+/).slice(1).join(' ').trim();
+
+        if (/^\d{6}$/.test(payload)) {
+          console.log('🚀 /start con payload detectado:', payload, 'ChatID:', chatId);
+          await handleLinkingCode(chatId, payload, firstName);
+          response.status(200).send('OK');
+          return;
+        }
+
         console.log('🚀 Usuario escribió /start:', firstName, 'ChatID:', chatId);
         
         // Guardar información básica del chat
@@ -496,7 +795,7 @@ export const handleTelegramWebhook = onRequest(async (request, response) => {
         
         // Intentar enviar activaciones pendientes "a ciegas" (si hubiera guardadas sin teléfono)
         // Por ahora no hay criterio seguro aquí; se envía instrucción únicamente.
-      } 
+      }
       // Si el usuario comparte su contacto
       else if (contact && contact.phone_number) {
         const normalizedE164 = toE164Peru(contact.phone_number);

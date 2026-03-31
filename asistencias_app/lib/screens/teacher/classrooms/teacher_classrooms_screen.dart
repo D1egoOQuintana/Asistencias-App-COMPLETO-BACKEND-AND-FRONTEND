@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../models/classroom_model.dart';
 import '../../../theme/app_design_system.dart';
 import '../../../widgets/common/state_widgets.dart';
+import '../qr_attendance_realtime.dart';
 import 'classroom_detail_screen.dart';
 
 class TeacherClassroomsScreen extends StatefulWidget {
@@ -81,6 +82,40 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
         reverseTransitionDuration: AppDesignSystem.durationFast,
         pageBuilder: (context, animation, secondaryAnimation) {
           return ClassroomDetailScreen(classroom: classroom);
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: AppDesignSystem.curveSnappy,
+          );
+
+          final slideAnimation = Tween<Offset>(
+            begin: const Offset(0.15, 0),
+            end: Offset.zero,
+          ).animate(curvedAnimation);
+
+          final fadeAnimation = Tween<double>(
+            begin: 0.0,
+            end: 1.0,
+          ).animate(curvedAnimation);
+
+          return SlideTransition(
+            position: slideAnimation,
+            child: FadeTransition(opacity: fadeAnimation, child: child),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openAttendanceForm(ClassroomModel classroom) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        settings: const RouteSettings(name: 'qr-attendance-realtime'),
+        transitionDuration: AppDesignSystem.durationFast,
+        reverseTransitionDuration: AppDesignSystem.durationFast,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return QRAttendanceRealtimeScreen(classroomId: classroom.id);
         },
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curvedAnimation = CurvedAnimation(
@@ -316,7 +351,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                         width: 8,
                         height: 8,
                         decoration: const BoxDecoration(
-                          color: _secondary,
+                          color: Color(0xFF1976D2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -464,11 +499,11 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                     runSpacing: 12,
                     children: [
                       ElevatedButton.icon(
-                        onPressed: () => _openClassroomDetail(classroom),
+                        onPressed: () => _openAttendanceForm(classroom),
                         icon: const Icon(Icons.how_to_reg_rounded),
                         label: const Text('Asistencia'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _darkPrimary,
+                          backgroundColor: const Color(0xFF1976D2),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
@@ -1083,7 +1118,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                 runSpacing: 10,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => _openClassroomDetail(classroom),
+                    onPressed: () => _openAttendanceForm(classroom),
                     icon: const Icon(Icons.how_to_reg),
                     label: const Text('Asistencia'),
                     style: ElevatedButton.styleFrom(
@@ -1239,7 +1274,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => _openClassroomDetail(classroom),
+                  onPressed: () => _openAttendanceForm(classroom),
                   icon: const Icon(Icons.how_to_reg, size: 18),
                   label: const Text('Asistencia'),
                   style: ElevatedButton.styleFrom(

@@ -24,6 +24,59 @@ class ImprovedHomeScreen extends StatefulWidget {
 
 class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     with AutomaticKeepAliveClientMixin {
+  static const Color _celeste = Color(0xFF1976D2);
+  static const Color _celesteDark = Color(0xFF1976D2);
+  Timer? _clockTimer;
+  DateTime _liveNow = DateTime.now();
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _recentAttendanceStream;
+  Stream<QuerySnapshot>? _teacherClassroomsStream;
+  String? _teacherStreamUid;
+
+  void _refreshClockIfNeeded() {
+    final now = DateTime.now();
+    final changedMinute = now.minute != _liveNow.minute;
+    final changedHour = now.hour != _liveNow.hour;
+    final changedDay =
+        now.day != _liveNow.day ||
+        now.month != _liveNow.month ||
+        now.year != _liveNow.year;
+
+    if (!mounted || (!changedMinute && !changedHour && !changedDay)) return;
+    setState(() {
+      _liveNow = now;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _recentAttendanceStream = FirebaseFirestore.instance
+        .collection('attendance')
+        .orderBy('timestamp', descending: true)
+        .limit(120)
+        .snapshots();
+
+    _clockTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _refreshClockIfNeeded();
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  Stream<QuerySnapshot> _getTeacherClassroomsStream(String teacherUid) {
+    if (_teacherClassroomsStream == null || _teacherStreamUid != teacherUid) {
+      _teacherStreamUid = teacherUid;
+      _teacherClassroomsStream = ClassroomService.getClassroomsByTeacherSimple(
+        teacherUid,
+      );
+    }
+    return _teacherClassroomsStream!;
+  }
+
   @override
   bool get wantKeepAlive => true;
 
@@ -49,7 +102,11 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (user.role == UserRole.admin) ...[
-                  _buildModernWelcomeHeader(context, user),
+                  _buildModernWelcomeHeader(
+                    context,
+                    user,
+                    currentTime: _liveNow,
+                  ),
                   const SizedBox(height: 32),
                   _buildAdminDashboard(context),
                 ] else
@@ -63,8 +120,12 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
   }
 
   /// Header moderno de bienvenida
-  Widget _buildModernWelcomeHeader(BuildContext context, UserModel user) {
-    final now = DateTime.now();
+  Widget _buildModernWelcomeHeader(
+    BuildContext context,
+    UserModel user, {
+    required DateTime currentTime,
+  }) {
+    final now = currentTime;
     final hour = now.hour;
     String greeting;
     IconData greetingIcon;
@@ -335,7 +396,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
   /// Dashboard para docentes
   Widget _buildTeacherDashboard(BuildContext context, String teacherUid) {
     return StreamBuilder<QuerySnapshot>(
-      stream: ClassroomService.getClassroomsByTeacherSimple(teacherUid),
+      stream: _getTeacherClassroomsStream(teacherUid),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -352,7 +413,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
         final firstName = user.fullName.trim().isEmpty
             ? 'Docente'
             : user.fullName.trim().split(' ').first;
-        final now = DateTime.now();
+        final now = _liveNow;
         final weekdayKey = _getWeekdayKey(now.weekday);
 
         final todaysScheduled = classrooms
@@ -362,6 +423,22 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                   classroom.schedule!.containsKey(weekdayKey),
             )
             .toList();
+
+        final ongoingClassrooms =
+            todaysScheduled.where((classroom) {
+              final schedule = classroom.schedule![weekdayKey]!;
+              return _isNowInsideClassroomSchedule(now, schedule);
+            }).toList()..sort((a, b) {
+              final aTime = _parseTimeOnDate(
+                now,
+                a.schedule![weekdayKey]!.startTime,
+              );
+              final bTime = _parseTimeOnDate(
+                now,
+                b.schedule![weekdayKey]!.startTime,
+              );
+              return aTime.compareTo(bTime);
+            });
 
         final upcomingClassrooms =
             todaysScheduled.where((classroom) {
@@ -379,12 +456,17 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
               return aTime.compareTo(bTime);
             });
 
-        final nextClassroom = upcomingClassrooms.isNotEmpty
-            ? upcomingClassrooms.first
-            : null;
-        final nextTime = nextClassroom == null
-            ? '--:--'
-            : nextClassroom.schedule?[weekdayKey]?.startTime ?? '--:--';
+        final hasActiveClass = ongoingClassrooms.isNotEmpty;
+        final targetClassroom = hasActiveClass
+          ? ongoingClassrooms.first
+          : (upcomingClassrooms.isNotEmpty ? upcomingClassrooms.first : null);
+
+        final targetSchedule = targetClassroom?.schedule?[weekdayKey];
+        final nextTime = targetSchedule == null
+          ? '--:--'
+          : hasActiveClass
+          ? '${targetSchedule.startTime} - ${targetSchedule.endTime}'
+          : targetSchedule.startTime;
 
         final hour = now.hour.toString().padLeft(2, '0');
         final minute = now.minute.toString().padLeft(2, '0');
@@ -432,15 +514,28 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'Asistencias',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0D47A1),
-                            letterSpacing: -0.4,
-                          ),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, titleConstraints) {
+                            return SizedBox(
+                              width: titleConstraints.maxWidth,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: const Text(
+                                  'Asistencias',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0D47A1),
+                                    letterSpacing: -0.4,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       Container(
@@ -504,7 +599,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                   style: TextStyle(
                     fontSize: isMobile ? 34 : 44,
                     height: 1.05,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     color: const Color(0xFF000D33),
                     letterSpacing: -1,
                   ),
@@ -555,7 +650,8 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                     SizedBox(
                       width: metricWidth,
                       child: _buildTeacherNextClassMetric(
-                        className: nextClassroom?.name ?? 'Sin clase',
+                        title: hasActiveClass ? 'CLASE ACTIVA' : 'PRÓXIMA CLASE',
+                        className: targetClassroom?.name ?? 'Sin clase',
                         classTime: nextTime,
                       ),
                     ),
@@ -600,7 +696,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
           Text(
             title.toUpperCase(),
             style: const TextStyle(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               fontSize: 11,
               color: Color(0xFF64748B),
               letterSpacing: 0.8,
@@ -610,13 +706,18 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
           Row(
             children: [
               Expanded(
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 34,
-                    color: Color(0xFF000D33),
-                    height: 1,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 32,
+                      color: Color(0xFF000D33),
+                      height: 1,
+                    ),
                   ),
                 ),
               ),
@@ -637,6 +738,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
   }
 
   Widget _buildTeacherNextClassMetric({
+    required String title,
     required String className,
     required String classTime,
   }) {
@@ -647,7 +749,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1976D2), Color(0xFF0D47A1)],
+          colors: [_celeste, _celesteDark],
         ),
         borderRadius: BorderRadius.circular(18),
       ),
@@ -655,7 +757,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'PRÓXIMA CLASE',
+            title,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.84),
               fontWeight: FontWeight.w700,
@@ -670,7 +772,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
               fontSize: 24,
             ),
           ),
@@ -707,12 +809,12 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF42A5F5), Color(0xFF1565C0)],
+                  colors: [_celeste, _celesteDark],
                 ),
                 border: Border.all(color: Colors.white, width: 8),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF1976D2).withValues(alpha: 0.28),
+                    color: _celesteDark.withValues(alpha: 0.28),
                     blurRadius: 48,
                     offset: const Offset(0, 22),
                   ),
@@ -730,7 +832,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                         letterSpacing: 1.2,
                       ),
                     ),
@@ -803,12 +905,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
             ],
           ),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('attendance')
-                .where('date', isEqualTo: _getTodayString())
-                .orderBy('timestamp', descending: true)
-                .limit(20)
-                .snapshots(),
+            stream: _recentAttendanceStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
@@ -818,12 +915,27 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
               }
 
               final docs = snapshot.data?.docs ?? const [];
+              final now = _liveNow;
               final filtered = docs
-                  .where(
-                    (doc) => classroomIds.contains(
-                      (doc.data()['classroomId'] ?? '').toString(),
-                    ),
-                  )
+                  .where((doc) {
+                  final classroomIdFromPath =
+                    (doc.data()['classroomId'] ?? '').toString();
+                    if (!classroomIds.contains(classroomIdFromPath)) return false;
+
+                    final data = doc.data();
+                  final ts = data['timestamp'];
+                    DateTime? scanTime;
+                    if (ts is Timestamp) {
+                      scanTime = ts.toDate();
+                    } else if (ts is DateTime) {
+                      scanTime = ts;
+                    }
+
+                    if (scanTime == null) return false;
+                    return scanTime.year == now.year &&
+                        scanTime.month == now.month &&
+                        scanTime.day == now.day;
+                  })
                   .take(3)
                   .toList();
 
@@ -847,8 +959,9 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                       .toString();
                   final classroomId = (data['classroomId'] ?? '').toString();
                   final classroom = classroomById[classroomId];
-                  final status = (data['status'] ?? 'present').toString();
-                  final statusLabel = status == 'late' ? 'Tarde' : 'Presente';
+                  final timeLabel = _formatRecentTimestamp(data['timestamp']);
+                  final isExit = data['exitAt'] != null;
+                  final statusLabel = isExit ? 'Salida' : 'Entrada';
 
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -887,6 +1000,15 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                                   fontSize: 12,
                                 ),
                               ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Hora: $timeLabel',
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 11,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -896,13 +1018,17 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFD8E8FF),
+                            color: isExit
+                                ? const Color(0xFFFFF3D6)
+                                : const Color(0xFFD8E8FF),
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             statusLabel.toUpperCase(),
-                            style: const TextStyle(
-                              color: Color(0xFF0D47A1),
+                            style: TextStyle(
+                              color: isExit
+                                  ? const Color(0xFF8A4B00)
+                                  : const Color(0xFF0D47A1),
                               fontWeight: FontWeight.w800,
                               fontSize: 10,
                             ),
@@ -918,6 +1044,23 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
         ],
       ),
     );
+  }
+
+  String _formatRecentTimestamp(dynamic rawTimestamp) {
+    DateTime? dateTime;
+
+    if (rawTimestamp is Timestamp) {
+      dateTime = rawTimestamp.toDate();
+    } else if (rawTimestamp is DateTime) {
+      dateTime = rawTimestamp;
+    }
+
+    if (dateTime == null) return '--:--:--';
+
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final second = dateTime.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
   }
 
   // ignore: unused_element
@@ -1160,8 +1303,8 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                                 );
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: AppDesignSystem.primaryColor,
+                                backgroundColor: _celesteDark,
+                                foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 13,
                                 ),
@@ -1171,7 +1314,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                               ),
                               child: const Text(
                                 'Tomar Asistencia',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                                style: TextStyle(fontWeight: FontWeight.w500),
                               ),
                             ),
                           ),
@@ -1365,17 +1508,17 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
             icon: const Icon(Icons.qr_code_scanner, size: 24),
             label: const Text(
               'Escanear QR',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppDesignSystem.primaryColor,
+              backgroundColor: _celesteDark,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(999),
               ),
               elevation: 8,
-              shadowColor: AppDesignSystem.primaryColor.withValues(alpha: 0.35),
+              shadowColor: _celesteDark.withValues(alpha: 0.35),
             ),
           ),
         ),
@@ -1623,7 +1766,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                       ),
                       child: const Text(
                         'Cancelar',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        style: TextStyle(fontWeight: FontWeight.w500),
                       ),
                     ),
                   ),
@@ -1648,7 +1791,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                       ),
                       child: const Text(
                         'Sí, salir',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        style: TextStyle(fontWeight: FontWeight.w500),
                       ),
                     ),
                   ),

@@ -47,6 +47,9 @@ class ClassroomModel {
   final DateTime updatedAt;
   final bool isActive;
   final Map<String, ClassSchedule>? schedule; // Map con key = dayOfWeek
+  final String? periodId;
+  final String? periodName;
+  final int? periodYear;
 
   ClassroomModel({
     this.id,
@@ -61,6 +64,9 @@ class ClassroomModel {
     required this.updatedAt,
     this.isActive = true,
     this.schedule,
+    this.periodId,
+    this.periodName,
+    this.periodYear,
   });
 
   /// Crear desde Firebase Document
@@ -90,6 +96,9 @@ class ClassroomModel {
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: data['isActive'] ?? true,
       schedule: schedule,
+      periodId: data['periodId'],
+      periodName: data['periodName'],
+      periodYear: data['periodYear'],
     );
   }
 
@@ -118,6 +127,9 @@ class ClassroomModel {
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: data['isActive'] ?? true,
       schedule: schedule,
+      periodId: data['periodId'],
+      periodName: data['periodName'],
+      periodYear: data['periodYear'],
     );
   }
 
@@ -134,6 +146,9 @@ class ClassroomModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'isActive': isActive,
+      'periodId': periodId,
+      'periodName': periodName,
+      'periodYear': periodYear,
     };
 
     // Agregar schedule si existe
@@ -160,6 +175,9 @@ class ClassroomModel {
     DateTime? updatedAt,
     bool? isActive,
     Map<String, ClassSchedule>? schedule,
+    String? periodId,
+    String? periodName,
+    int? periodYear,
   }) {
     return ClassroomModel(
       id: id ?? this.id,
@@ -174,6 +192,9 @@ class ClassroomModel {
       updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
       schedule: schedule ?? this.schedule,
+      periodId: periodId ?? this.periodId,
+      periodName: periodName ?? this.periodName,
+      periodYear: periodYear ?? this.periodYear,
     );
   }
 

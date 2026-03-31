@@ -9,6 +9,7 @@ import '../../../models/classroom_model.dart';
 import '../../../models/student_model.dart';
 import '../../../services/student_service.dart';
 import '../../../theme/app_design_system.dart';
+import '../../../widgets/common/app_feedback_dialog.dart';
 
 enum SortOrder { aToZ, zToA, newest, oldest }
 
@@ -76,13 +77,6 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.classroom.fullName),
-          actions: [
-            IconButton(
-              tooltip: 'Configurar horarios',
-              icon: const Icon(Icons.schedule),
-              onPressed: _showScheduleSettings,
-            ),
-          ],
         ),
         body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: classroomId == null
@@ -926,6 +920,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
     );
   }
 
+  // ignore: unused_element
   Future<void> _showScheduleSettings() async {
     final saved = await Navigator.of(context).push<bool>(
       PageRouteBuilder(
@@ -965,11 +960,10 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
         _focusedDay = DateTime.now();
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Horarios guardados exitosamente'),
-          backgroundColor: Colors.green,
-        ),
+      await AppFeedbackDialog.success(
+        context,
+        title: 'Aula configurada',
+        message: 'Los horarios del aula se guardaron correctamente.',
       );
     }
   }
@@ -1250,57 +1244,118 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
 
       final attendanceId = '${studentId}_$dateKey';
 
-      // Pre-chequeo: si ya existe un doc (legado) con ID aleatorio para hoy, evitar duplicar
-      final existing = await FirebaseFirestore.instance
+      final attendanceRef = FirebaseFirestore.instance
           .collection('attendance')
-          .where('classroomId', isEqualTo: widget.classroom.id)
-          .where('studentId', isEqualTo: studentId)
-          .where('date', isEqualTo: dateKey)
-          .limit(1)
-          .get();
-      if (existing.docs.isNotEmpty) {
-        throw Exception('YA_REGISTRADO');
-      }
+          .doc(attendanceId);
+      final entryEventRef = FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(widget.classroom.id)
+          .collection('attendance_events')
+          .doc('${attendanceId}__entry');
+      final exitEventRef = FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(widget.classroom.id)
+          .collection('attendance_events')
+          .doc('${attendanceId}__exit');
 
       await FirebaseFirestore.instance.runTransaction((tx) async {
-        final ref = FirebaseFirestore.instance
-            .collection('attendance')
-            .doc(attendanceId);
-        final snap = await tx.get(ref);
-        if (snap.exists) {
-          // Ya registrado hoy: no crear nuevo documento
-          throw Exception('YA_REGISTRADO');
+        final attendanceSnap = await tx.get(attendanceRef);
+
+        if (!attendanceSnap.exists) {
+          tx.set(attendanceRef, {
+            'studentId': studentId,
+            'studentName': studentName,
+            'classroomId': widget.classroom.id,
+            'sessionId': _sessionId,
+            'date': dateKey,
+            'status': status,
+            'timestamp': FieldValue.serverTimestamp(),
+            'entryAt': FieldValue.serverTimestamp(),
+            'eventDriven': true,
+            'source': 'attendance_event',
+          }, SetOptions(merge: true));
+
+          tx.set(entryEventRef, {
+            'eventType': 'entry',
+            'studentId': studentId,
+            'studentName': studentName,
+            'classroomId': widget.classroom.id,
+            'sessionId': _sessionId,
+            'date': dateKey,
+            'status': status,
+            'eventAt': FieldValue.serverTimestamp(),
+            'source': 'qr',
+            'createdAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          return;
         }
-        tx.set(ref, {
+
+        final attendanceData = attendanceSnap.data() ?? {};
+        if (attendanceData['exitAt'] != null) {
+          throw Exception('YA_SALIDA_REGISTRADA');
+        }
+
+        tx.set(attendanceRef, {
+          'exitAt': FieldValue.serverTimestamp(),
+          'exitSource': 'qr',
+          'updatedAt': FieldValue.serverTimestamp(),
+          'eventDriven': true,
+          'source': 'attendance_event',
+        }, SetOptions(merge: true));
+
+        tx.set(exitEventRef, {
+          'eventType': 'exit',
           'studentId': studentId,
           'studentName': studentName,
           'classroomId': widget.classroom.id,
           'sessionId': _sessionId,
           'date': dateKey,
-          'status': status,
-          'timestamp': FieldValue.serverTimestamp(),
-          'entryAt': FieldValue.serverTimestamp(),
-        });
+          'status': 'exit',
+          'eventAt': FieldValue.serverTimestamp(),
+          'source': 'qr',
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       });
+
+      final updatedDoc = await attendanceRef.get();
+      final hasExit = (updatedDoc.data() ?? {})['exitAt'] != null;
 
       _updateLastScannedCard(
         studentName: studentName,
         student: scannedStudent,
-        message:
-            'Asistencia marcada como ${status == 'present' ? 'Presente' : 'Tarde'}',
+        message: hasExit
+            ? 'Salida registrada correctamente'
+            : 'Asistencia marcada como ${status == 'present' ? 'Presente' : 'Tarde'}',
         status: 'SUCCESS',
         statusColor: Colors.green,
         success: true,
       );
 
       _showResultModal(
-        title: 'Asistencia registrada',
-        message: '$studentName • ${status == 'present' ? 'Presente' : 'Tarde'}',
+        title: hasExit ? 'Salida registrada' : 'Asistencia registrada',
+        message: hasExit
+            ? '$studentName • Salida'
+            : '$studentName • ${status == 'present' ? 'Presente' : 'Tarde'}',
         color: Colors.green,
         icon: Icons.check_circle,
       );
     } catch (e) {
-      if (e.toString().contains('YA_REGISTRADO')) {
+      if (e.toString().contains('YA_SALIDA_REGISTRADA')) {
+        _updateLastScannedCard(
+          studentName: studentName,
+          student: scannedStudent,
+          message: 'Salida ya registrada hoy',
+          status: 'DUPLICADO',
+          statusColor: Colors.orange,
+          success: false,
+        );
+        _showResultModal(
+          title: 'Ya registró salida',
+          message: '$studentName ya tiene salida registrada hoy',
+          color: Colors.orange,
+          icon: Icons.info,
+        );
+      } else if (e.toString().contains('YA_REGISTRADO')) {
         _updateLastScannedCard(
           studentName: studentName,
           student: scannedStudent,
@@ -2027,7 +2082,6 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
                 loadPercent: _loadPercent(),
               ),
               const SizedBox(height: 16),
-              const _BottomMockNavigationBar(),
             ],
           ),
         ),
@@ -2360,65 +2414,6 @@ class _TimePickerTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _BottomMockNavigationBar extends StatelessWidget {
-  const _BottomMockNavigationBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final inactive = Colors.blueGrey.shade600;
-
-    Widget item({
-      required IconData icon,
-      required String label,
-      required bool active,
-    }) {
-      final color = active ? Colors.white : inactive;
-      return Container(
-        decoration: active
-            ? BoxDecoration(
-                color: ScheduleSettingsScreen.brandBlue,
-                borderRadius: BorderRadius.circular(12),
-              )
-            : null,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0x1A5F6470)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          item(icon: Icons.calendar_today, label: 'Horarios', active: true),
-          item(icon: Icons.qr_code_scanner, label: 'Asistencia', active: false),
-          item(icon: Icons.groups, label: 'Alumnos', active: false),
-          item(icon: Icons.assessment, label: 'Reportes', active: false),
-        ],
       ),
     );
   }

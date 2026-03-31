@@ -139,14 +139,38 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             .where((classroom) => classroom['isActive'] != false)
             .toList();
 
-        // Si por calidad de datos no hay isActive válido, mostrar todas.
-        classrooms = activeClassrooms.isNotEmpty
-            ? activeClassrooms
-            : allClassrooms;
+        final nowYear = DateTime.now().year;
+        final currentPeriodClassrooms = activeClassrooms.where((classroom) {
+          final periodYear = classroom['periodYear'];
+          if (periodYear is int) return periodYear == nowYear;
+          if (periodYear is String) return int.tryParse(periodYear) == nowYear;
+          return false;
+        }).toList();
 
-        print('DEBUG: Aulas cargadas: ${classrooms.length}');
+        // Priorizar aulas activas del año en curso y evitar mezclar históricas.
+        classrooms = currentPeriodClassrooms.isNotEmpty
+            ? currentPeriodClassrooms
+            : activeClassrooms;
+
+        classrooms.sort((a, b) {
+          final aUpdated = a['updatedAt'];
+          final bUpdated = b['updatedAt'];
+          DateTime aDate = DateTime.fromMillisecondsSinceEpoch(0);
+          DateTime bDate = DateTime.fromMillisecondsSinceEpoch(0);
+
+          if (aUpdated is Timestamp) {
+            aDate = aUpdated.toDate();
+          }
+          if (bUpdated is Timestamp) {
+            bDate = bUpdated.toDate();
+          }
+
+          return bDate.compareTo(aDate);
+        });
+
+        print('DEBUG: Aulas cargadas (filtradas): ${classrooms.length}');
         if (classrooms.isNotEmpty) {
-          print('DEBUG: Primera aula: ${classrooms[0]}');
+          print('DEBUG: Aula seleccionable inicial: ${classrooms[0]}');
         }
 
         final selectedStillExists =
@@ -1135,6 +1159,80 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         999,
       );
     });
+  }
+
+  String _classroomLabel(Map<String, dynamic> classroom) {
+    final grade = (classroom['grade'] ?? '').toString();
+    final section = (classroom['section'] ?? '').toString();
+    final name = (classroom['name'] ?? 'Aula').toString();
+    if (grade.isNotEmpty || section.isNotEmpty) {
+      return '$grade° $section - $name';
+    }
+    return name;
+  }
+
+  Widget _buildClassroomSelector() {
+    final hasData = classrooms.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Aula del reporte',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: hasData &&
+                    classrooms.any((c) => c['id'] == selectedClassroomId)
+                ? selectedClassroomId
+                : (hasData ? classrooms.first['id'] as String? : null),
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+            ),
+            hint: const Text('Selecciona un aula'),
+            items: classrooms
+                .map(
+                  (classroom) => DropdownMenuItem<String>(
+                    value: classroom['id']?.toString(),
+                    child: Text(
+                      _classroomLabel(classroom),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: !hasData
+                ? null
+                : (value) async {
+                    if (value == null || value == selectedClassroomId) return;
+                    _setStateIfMounted(() {
+                      selectedClassroomId = value;
+                      overviewData = null;
+                    });
+                    await _applyFilters();
+                  },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildTabButton({
@@ -2458,6 +2556,14 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                         context,
                         title: 'Gestión de reportes',
                         showLive: false,
+                      ),
+                      const SizedBox(height: 14),
+                      Padding(
+                        padding: AppDesignSystem.paddingSymmetric(
+                          context,
+                          horizontal: AppDesignSystem.spaceMD,
+                        ),
+                        child: _buildClassroomSelector(),
                       ),
                       const SizedBox(height: 18),
                       Padding(

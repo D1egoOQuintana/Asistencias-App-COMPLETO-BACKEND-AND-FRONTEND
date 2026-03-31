@@ -12,6 +12,7 @@ import '../../../models/user_model.dart';
 import '../../../models/classroom_model.dart';
 import '../../../models/student_model.dart';
 import '../../../theme/app_design_system.dart';
+import '../../../widgets/common/app_feedback_dialog.dart';
 import 'teacher_create_student_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -882,37 +883,21 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
                                   if (mounted) {
                                     Navigator.of(safeContext).pop();
-                                    ScaffoldMessenger.of(
-                                      safeContext,
-                                    ).showSnackBar(
-                                      SnackBar(
-                                        content: Row(
-                                          children: [
-                                            Icon(
-                                              success
-                                                  ? Icons.check_circle
-                                                  : Icons.error,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Text(
-                                              success
-                                                  ? 'Estudiante actualizado exitosamente'
-                                                  : 'Error al actualizar estudiante',
-                                            ),
-                                          ],
-                                        ),
-                                        backgroundColor: success
-                                            ? Colors.green
-                                            : Colors.red,
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    );
+                                    if (success) {
+                                      await AppFeedbackDialog.success(
+                                        safeContext,
+                                        title: 'Estudiante actualizado',
+                                        message:
+                                            'Los datos del estudiante se guardaron correctamente.',
+                                      );
+                                    } else {
+                                      await AppFeedbackDialog.error(
+                                        safeContext,
+                                        title: 'No se pudo actualizar',
+                                        message:
+                                            'No fue posible actualizar el estudiante. Intenta nuevamente.',
+                                      );
+                                    }
                                   }
                                 },
                                 icon: const Icon(Icons.save_rounded),
@@ -1003,37 +988,21 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
                                   if (mounted) {
                                     Navigator.of(safeContext).pop();
-                                    ScaffoldMessenger.of(
-                                      safeContext,
-                                    ).showSnackBar(
-                                      SnackBar(
-                                        content: Row(
-                                          children: [
-                                            Icon(
-                                              success
-                                                  ? Icons.check_circle
-                                                  : Icons.error,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Text(
-                                              success
-                                                  ? 'Estudiante actualizado exitosamente'
-                                                  : 'Error al actualizar estudiante',
-                                            ),
-                                          ],
-                                        ),
-                                        backgroundColor: success
-                                            ? Colors.green
-                                            : Colors.red,
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                      ),
-                                    );
+                                    if (success) {
+                                      await AppFeedbackDialog.success(
+                                        safeContext,
+                                        title: 'Estudiante actualizado',
+                                        message:
+                                            'Los datos del estudiante se guardaron correctamente.',
+                                      );
+                                    } else {
+                                      await AppFeedbackDialog.error(
+                                        safeContext,
+                                        title: 'No se pudo actualizar',
+                                        message:
+                                            'No fue posible actualizar el estudiante. Intenta nuevamente.',
+                                      );
+                                    }
                                   }
                                 },
                                 icon: const Icon(Icons.save_rounded),
@@ -1104,29 +1073,21 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
           if (mounted) {
             Navigator.of(safeContext).pop();
-            ScaffoldMessenger.of(safeContext).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    Icon(
-                      success ? Icons.check_circle : Icons.error,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      success
-                          ? 'Estudiante eliminado exitosamente'
-                          : 'Error al eliminar estudiante',
-                    ),
-                  ],
-                ),
-                backgroundColor: success ? Colors.green : Colors.red,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
+            if (success) {
+              await AppFeedbackDialog.success(
+                safeContext,
+                title: 'Estudiante eliminado',
+                message:
+                    'El estudiante se eliminó correctamente del listado activo.',
+              );
+            } else {
+              await AppFeedbackDialog.error(
+                safeContext,
+                title: 'No se pudo eliminar',
+                message:
+                    'No fue posible eliminar el estudiante. Intenta nuevamente.',
+              );
+            }
           }
         }
 
@@ -2280,19 +2241,10 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
     if (!mounted || created != true) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
-            Text('Estudiante creado exitosamente'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1DA056),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    await AppFeedbackDialog.success(
+      context,
+      title: 'Estudiante creado',
+      message: 'El estudiante se registró correctamente.',
     );
   }
 
@@ -2441,26 +2393,21 @@ class _StudentQRDialog extends StatelessWidget {
 
       // Mostrar mensaje de éxito
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'QR compartido correctamente para ${student.firstName} ${student.lastName}',
-            ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
+        await AppFeedbackDialog.success(
+          context,
+          title: 'QR compartido',
+          message:
+              'El código QR de ${student.firstName} ${student.lastName} se compartió correctamente.',
         );
       }
     } catch (e) {
       // Error comentado para producción
       // print('Error al generar QR: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al descargar el QR'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
+        await AppFeedbackDialog.error(
+          context,
+          title: 'Error al compartir QR',
+          message: 'No se pudo generar o compartir el código QR.',
         );
       }
     }

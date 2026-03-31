@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/classroom_model.dart';
+import 'academic_period_service.dart';
 
 class ClassroomService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -24,11 +25,14 @@ class ClassroomService {
       }
 
       // Verificar si ya existe un salón con el mismo nombre, grado y sección
+        final activePeriod = await AcademicPeriodService.ensureActivePeriod();
+
       final existingClassroom = await _firestore
           .collection('classrooms')
           .where('name', isEqualTo: name)
           .where('grade', isEqualTo: grade)
           .where('section', isEqualTo: section)
+          .where('periodId', isEqualTo: activePeriod['id'])
           .where('isActive', isEqualTo: true)
           .get();
 
@@ -51,6 +55,11 @@ class ClassroomService {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         isActive: true,
+        periodId: activePeriod['id']?.toString(),
+        periodName: activePeriod['name']?.toString(),
+        periodYear: activePeriod['year'] is int
+            ? activePeriod['year'] as int
+            : int.tryParse('${activePeriod['year']}'),
       );
 
       // Guardar en Firestore
@@ -115,6 +124,14 @@ class ClassroomService {
   static Stream<QuerySnapshot> getAllClassrooms() {
     return _firestore
         .collection('classrooms')
+        .where('isActive', isEqualTo: true)
+        .snapshots();
+  }
+
+  static Stream<QuerySnapshot> getAllClassroomsByPeriod(String periodId) {
+    return _firestore
+        .collection('classrooms')
+        .where('periodId', isEqualTo: periodId)
         .where('isActive', isEqualTo: true)
         .snapshots();
   }

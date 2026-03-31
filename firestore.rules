@@ -14,7 +14,7 @@ service cloud.firestore {
       );
     }
     function isAdmin() { return hasRole('admin'); }
-    function isDocente() { return hasRole('docente'); }
+    function isDocente() { return hasRole('docente') || hasRole('teacher'); }
     function isAdminEmail() {
       // Lista de emails de administradores permitidos
       return request.auth.token.email in ['admin@asistencias.com', 'luisangelfabian10@gmail.com'];
@@ -25,13 +25,20 @@ service cloud.firestore {
 
     // Acceso a un salón para docentes: dueño del salón o asignado explícitamente
     function hasClassroomAccess(classroomId) {
-      return isAuthed() && isDocente() && (
+      return isAuthed() && (
         (
           exists(/databases/$(database)/documents/classrooms/$(classroomId)) &&
-          get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherUid == request.auth.uid
+          (
+            get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherUid == request.auth.uid ||
+            get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherId == request.auth.uid ||
+            get(/databases/$(database)/documents/classrooms/$(classroomId)).data.ownerUid == request.auth.uid
+          )
         ) || (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          classroomId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassrooms
+          (
+            'assignedClassrooms' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            classroomId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassrooms
+          )
         )
       );
     }
@@ -62,22 +69,70 @@ service cloud.firestore {
       allow delete: if (isAdmin() || isAdminEmail());
     }
 
+    match /classrooms/{classroomId}/attendance/{attendanceId} {
+      allow read: if isAuthed() &&
+        ((isAdmin() || isAdminEmail()) || hasClassroomAccess(classroomId));
+
+      allow create: if isAuthed() &&
+        ((isAdmin() || isAdminEmail()) || hasClassroomAccess(classroomId)) &&
+        (request.resource.data.status in ['present', 'late', 'absent', 'presente', 'tarde', 'ausente']);
+
+      allow update: if isAuthed() &&
+        ((isAdmin() || isAdminEmail()) || hasClassroomAccess(classroomId)) &&
+        (
+          !request.resource.data.diff(resource.data).changedKeys().hasAny(['status']) ||
+          (request.resource.data.status in ['present', 'late', 'absent', 'presente', 'tarde', 'ausente'])
+        );
+
+      allow delete: if (isAdmin() || isAdminEmail());
+    }
+
+    match /classrooms/{classroomId}/attendance_events/{eventId} {
+      allow read: if isAuthed() &&
+        ((isAdmin() || isAdminEmail()) || hasClassroomAccess(classroomId));
+
+      allow create: if isAuthed() &&
+        ((isAdmin() || isAdminEmail()) || hasClassroomAccess(classroomId)) &&
+        (
+          request.resource.data.eventType in ['entry', 'exit'] &&
+          request.resource.data.source in ['qr', 'manual', 'system']
+        );
+
+      allow update: if false;
+      allow delete: if (isAdmin() || isAdminEmail());
+    }
+
+    match /academic_periods/{periodId} {
+      allow read: if isAuthed();
+      allow create, update, delete: if (isAdmin() || isAdminEmail());
+    }
+
     match /attendance/{attendanceId} {
-      // Crear: Solo docentes o admin
-      allow create: if isDocenteOrAdmin();
-
-      // Leer: Permitir lectura amplia para docentes y admin
-      allow read: if isDocenteOrAdmin();
-
-      // Actualizar: permitir actualizaciones flexibles para docentes
-      allow update: if isDocenteOrAdmin() &&
-        // Validar que el docente tenga acceso al aula si no es admin
+      // Crear/leer/actualizar para usuarios autenticados con acceso al aula.
+      allow create: if isAuthed() &&
         (
           (isAdmin() || isAdminEmail()) ||
-          (isDocente() && (
-            resource.data.keys().hasAny(['classroomId']) == false ||
-            hasClassroomAccess(resource.data.classroomId)
-          ))
+          (
+            request.resource.data.classroomId is string &&
+            hasClassroomAccess(request.resource.data.classroomId)
+          )
+        ) &&
+        (
+          !('status' in request.resource.data) ||
+          (request.resource.data.status in ['present', 'late', 'absent', 'presente', 'tarde', 'ausente'])
+        );
+
+      // Permitir lectura autenticada para soportar transacciones QR cuando
+      // el documento aún no existe (get inicial en registerQrScanForDay).
+      allow read: if isAuthed();
+
+      allow update: if isAuthed() &&
+        (
+          (isAdmin() || isAdminEmail()) ||
+          (
+            (resource.data.classroomId is string && hasClassroomAccess(resource.data.classroomId)) ||
+            (request.resource.data.classroomId is string && hasClassroomAccess(request.resource.data.classroomId))
+          )
         ) &&
         // Validar que el status sea válido si se está cambiando
         (

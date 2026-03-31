@@ -15,7 +15,11 @@ try {
   // ✅ USAR FUNCIONES DE TELEGRAM DEL ARCHIVO telegram.ts (compilado)
   exports.sendTelegramNotification = tsModules.sendTelegramNotification;
   exports.sendTelegramNotificationLegacy = tsModules.sendTelegramNotificationLegacy;
+  exports.sendTelegramNotificationClassroomScoped = tsModules.sendTelegramNotificationClassroomScoped;
+  exports.sendTelegramAttendanceEventNotification = tsModules.sendTelegramAttendanceEventNotification;
+  exports.syncClassroomAttendanceToRoot = tsModules.syncClassroomAttendanceToRoot;
   exports.handleTelegramWebhook = tsModules.handleTelegramWebhook;
+  exports.createTelegramActivationLink = tsModules.createTelegramActivationLink;
   
   console.log('✅ Funciones de Telegram cargadas desde telegram.ts');
 } catch (error) {

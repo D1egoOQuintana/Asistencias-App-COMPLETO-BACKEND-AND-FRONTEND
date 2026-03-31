@@ -3,6 +3,12 @@ import 'package:flutter/foundation.dart';
 import '../models/attendance_models.dart';
 import '../services/attendance_repository.dart';
 
+enum AttendanceScanOutcome {
+  entryRegistered,
+  exitRegistered,
+  exitAlreadyRegistered,
+}
+
 class AttendanceProvider extends ChangeNotifier {
   final AttendanceRepository _repo;
   AttendanceProvider(this._repo);
@@ -95,6 +101,33 @@ class AttendanceProvider extends ChangeNotifier {
       studentName: studentName,
       when: now,
     );
+  }
+
+  Future<AttendanceScanOutcome> registerQrScan({
+    required String studentId,
+    required AttendanceStatus status,
+    String? studentName,
+    String? sessionId,
+  }) async {
+    if (_classroomId == null) return AttendanceScanOutcome.exitAlreadyRegistered;
+
+    final result = await _repo.registerQrScanForDay(
+      classroomId: _classroomId!,
+      studentId: studentId,
+      status: status,
+      studentName: studentName,
+      sessionId: sessionId,
+      when: DateTime.now(),
+    );
+
+    switch (result.type) {
+      case QrScanResultType.entryRegistered:
+        return AttendanceScanOutcome.entryRegistered;
+      case QrScanResultType.exitRegistered:
+        return AttendanceScanOutcome.exitRegistered;
+      case QrScanResultType.exitAlreadyRegistered:
+        return AttendanceScanOutcome.exitAlreadyRegistered;
+    }
   }
 
   @override
