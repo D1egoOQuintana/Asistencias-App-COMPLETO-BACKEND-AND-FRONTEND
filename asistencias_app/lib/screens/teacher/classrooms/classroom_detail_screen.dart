@@ -75,9 +75,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
         context,
       ).copyWith(textScaler: const TextScaler.linear(1.0)),
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.classroom.fullName),
-        ),
+        appBar: AppBar(title: Text(widget.classroom.fullName)),
         body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: classroomId == null
               ? null

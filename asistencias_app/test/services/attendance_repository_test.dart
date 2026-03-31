@@ -22,7 +22,10 @@ void main() {
       expect(result.type, QrScanResultType.entryRegistered);
 
       final dateKey = '2026-03-30';
-      final doc = await fakeDb.collection('attendance').doc('student-1_$dateKey').get();
+      final doc = await fakeDb
+          .collection('attendance')
+          .doc('student-1_$dateKey')
+          .get();
       expect(doc.exists, isTrue);
       final data = doc.data()!;
       expect(data['classroomId'], 'classroom-A');
@@ -56,7 +59,10 @@ void main() {
       expect(result.type, QrScanResultType.exitRegistered);
 
       final dateKey = '2026-03-30';
-      final doc = await fakeDb.collection('attendance').doc('student-1_$dateKey').get();
+      final doc = await fakeDb
+          .collection('attendance')
+          .doc('student-1_$dateKey')
+          .get();
       final data = doc.data()!;
       expect(data['exitAt'], isNotNull);
       expect(data['exitSource'], 'qr');

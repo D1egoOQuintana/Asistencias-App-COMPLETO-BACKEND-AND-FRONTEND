@@ -40,12 +40,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
-                      border: Border.all(color: _brandBlue.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: _brandBlue.withValues(alpha: 0.2),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.school_rounded,
-                      color: _brandBlue,
-                    ),
+                    child: const Icon(Icons.school_rounded, color: _brandBlue),
                   ),
                   const SizedBox(width: 12),
                   Flexible(
@@ -366,7 +365,9 @@ class _IdentityCard extends StatelessWidget {
             color: isPrimary ? brandBlue : Colors.white,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: isPrimary ? Colors.transparent : brandBlue.withValues(alpha: 0.12),
+              color: isPrimary
+                  ? Colors.transparent
+                  : brandBlue.withValues(alpha: 0.12),
             ),
           ),
           child: Column(
@@ -402,7 +403,9 @@ class _IdentityCard extends StatelessWidget {
                 style: GoogleFonts.workSans(
                   fontSize: 17,
                   fontWeight: FontWeight.w500,
-                  color: isPrimary ? Colors.white.withValues(alpha: 0.88) : const Color(0xFF5F6470),
+                  color: isPrimary
+                      ? Colors.white.withValues(alpha: 0.88)
+                      : const Color(0xFF5F6470),
                 ),
               ),
               const SizedBox(height: 20),
@@ -508,7 +511,9 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
                   },
                   style: TextButton.styleFrom(
                     foregroundColor: widget.brandBlue,
-                    textStyle: GoogleFonts.workSans(fontWeight: FontWeight.w600),
+                    textStyle: GoogleFonts.workSans(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   child: const Text('¿Olvidaste tu contraseña?'),
                 ),
@@ -521,7 +526,9 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
                       elevation: 0,
                       backgroundColor: widget.brandBlue,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: widget.brandBlue.withValues(alpha: 0.6),
+                      disabledBackgroundColor: widget.brandBlue.withValues(
+                        alpha: 0.6,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
                       ),
@@ -532,7 +539,9 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
                             height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.4,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : Row(
@@ -583,7 +592,8 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
       controller: _emailController,
       keyboardType: TextInputType.emailAddress,
       textInputAction: TextInputAction.next,
-      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocusNode),
+      onFieldSubmitted: (_) =>
+          FocusScope.of(context).requestFocus(_passwordFocusNode),
       style: GoogleFonts.workSans(fontSize: 16, fontWeight: FontWeight.w500),
       decoration: _baseDecoration(
         hint: 'nombre@institucion.edu',
@@ -593,7 +603,9 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
         if (value == null || value.trim().isEmpty) {
           return 'Ingresa tu correo electrónico.';
         }
-        if (!RegExp(r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+        if (!RegExp(
+          r'^[\w\-.]+@([\w-]+\.)+[\w-]{2,4}$',
+        ).hasMatch(value.trim())) {
           return 'Ingresa un correo válido.';
         }
         return null;
@@ -653,7 +665,10 @@ class _ModernLoginFormState extends State<_ModernLoginForm> {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),
-        borderSide: BorderSide(color: widget.brandBlue.withValues(alpha: 0.12), width: 1.2),
+        borderSide: BorderSide(
+          color: widget.brandBlue.withValues(alpha: 0.12),
+          width: 1.2,
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(20),

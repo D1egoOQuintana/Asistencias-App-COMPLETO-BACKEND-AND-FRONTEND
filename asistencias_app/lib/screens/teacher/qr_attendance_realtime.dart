@@ -258,7 +258,9 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Selecciona un aula para abrir la lista de asistencia.'),
+          content: Text(
+            'Selecciona un aula para abrir la lista de asistencia.',
+          ),
           backgroundColor: Colors.orange,
         ),
       );

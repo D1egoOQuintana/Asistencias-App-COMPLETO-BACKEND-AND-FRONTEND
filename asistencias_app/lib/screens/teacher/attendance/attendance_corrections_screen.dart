@@ -18,7 +18,8 @@ class AttendanceCorrectionsScreen extends StatefulWidget {
       _AttendanceCorrectionsScreenState();
 }
 
-class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScreen> {
+class _AttendanceCorrectionsScreenState
+    extends State<AttendanceCorrectionsScreen> {
   final Set<String> _busyIds = <String>{};
   DateTime _selectedDay = DateTime.now();
 
@@ -42,8 +43,8 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
 
   Query<Map<String, dynamic>> _queryForSelectedDay() {
     return FirebaseFirestore.instance
-      .collection('attendance')
-      .where('classroomId', isEqualTo: widget.classroomId)
+        .collection('attendance')
+        .where('classroomId', isEqualTo: widget.classroomId)
         .where('date', isEqualTo: _dateKey(_selectedDay));
   }
 
@@ -119,7 +120,9 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            hasExit ? 'Salida removida para correccion.' : 'Salida registrada manualmente.',
+            hasExit
+                ? 'Salida removida para correccion.'
+                : 'Salida registrada manualmente.',
           ),
         ),
       );
@@ -300,7 +303,9 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
                                 radius: 20,
                                 backgroundColor: const Color(0xFFE8F1FF),
                                 child: Text(
-                                  (studentName.isNotEmpty ? studentName : studentId)[0]
+                                  (studentName.isNotEmpty
+                                          ? studentName
+                                          : studentId)[0]
                                       .toUpperCase(),
                                   style: const TextStyle(
                                     color: Color(0xFF1D4F87),
@@ -368,10 +373,10 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
                                 onSelected: isBusy
                                     ? null
                                     : (_) => _updateStatus(
-                                          ref: doc.reference,
-                                          docId: doc.id,
-                                          status: AttendanceStatus.presente,
-                                        ),
+                                        ref: doc.reference,
+                                        docId: doc.id,
+                                        status: AttendanceStatus.presente,
+                                      ),
                               ),
                               ChoiceChip(
                                 label: const Text('Tarde'),
@@ -379,10 +384,10 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
                                 onSelected: isBusy
                                     ? null
                                     : (_) => _updateStatus(
-                                          ref: doc.reference,
-                                          docId: doc.id,
-                                          status: AttendanceStatus.tarde,
-                                        ),
+                                        ref: doc.reference,
+                                        docId: doc.id,
+                                        status: AttendanceStatus.tarde,
+                                      ),
                               ),
                               ChoiceChip(
                                 label: const Text('Ausente'),
@@ -390,10 +395,10 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
                                 onSelected: isBusy
                                     ? null
                                     : (_) => _updateStatus(
-                                          ref: doc.reference,
-                                          docId: doc.id,
-                                          status: AttendanceStatus.ausente,
-                                        ),
+                                        ref: doc.reference,
+                                        docId: doc.id,
+                                        status: AttendanceStatus.ausente,
+                                      ),
                               ),
                             ],
                           ),
@@ -418,17 +423,19 @@ class _AttendanceCorrectionsScreenState extends State<AttendanceCorrectionsScree
                                 onPressed: isBusy
                                     ? null
                                     : () => _toggleExit(
-                                          ref: doc.reference,
-                                          docId: doc.id,
-                                          hasExit: hasExit,
-                                        ),
+                                        ref: doc.reference,
+                                        docId: doc.id,
+                                        hasExit: hasExit,
+                                      ),
                                 icon: Icon(
                                   hasExit
                                       ? Icons.remove_circle_outline_rounded
                                       : Icons.logout_rounded,
                                 ),
                                 label: Text(
-                                  hasExit ? 'Quitar salida' : 'Registrar salida',
+                                  hasExit
+                                      ? 'Quitar salida'
+                                      : 'Registrar salida',
                                 ),
                               ),
                             ],

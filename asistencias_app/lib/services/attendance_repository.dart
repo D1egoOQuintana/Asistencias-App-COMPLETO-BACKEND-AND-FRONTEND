@@ -43,7 +43,7 @@ class AttendanceRepository {
     }
   }
 
-    CollectionReference<Map<String, dynamic>> attendance() =>
+  CollectionReference<Map<String, dynamic>> attendance() =>
       _db.collection('attendance');
 
   /// Stream de entradas de asistencia para un día concreto (sincronización con QR)

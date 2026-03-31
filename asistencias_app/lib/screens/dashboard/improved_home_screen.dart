@@ -28,7 +28,8 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
   static const Color _celesteDark = Color(0xFF1976D2);
   Timer? _clockTimer;
   DateTime _liveNow = DateTime.now();
-  late final Stream<QuerySnapshot<Map<String, dynamic>>> _recentAttendanceStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>>
+  _recentAttendanceStream;
   Stream<QuerySnapshot>? _teacherClassroomsStream;
   String? _teacherStreamUid;
 
@@ -458,15 +459,15 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
 
         final hasActiveClass = ongoingClassrooms.isNotEmpty;
         final targetClassroom = hasActiveClass
-          ? ongoingClassrooms.first
-          : (upcomingClassrooms.isNotEmpty ? upcomingClassrooms.first : null);
+            ? ongoingClassrooms.first
+            : (upcomingClassrooms.isNotEmpty ? upcomingClassrooms.first : null);
 
         final targetSchedule = targetClassroom?.schedule?[weekdayKey];
         final nextTime = targetSchedule == null
-          ? '--:--'
-          : hasActiveClass
-          ? '${targetSchedule.startTime} - ${targetSchedule.endTime}'
-          : targetSchedule.startTime;
+            ? '--:--'
+            : hasActiveClass
+            ? '${targetSchedule.startTime} - ${targetSchedule.endTime}'
+            : targetSchedule.startTime;
 
         final hour = now.hour.toString().padLeft(2, '0');
         final minute = now.minute.toString().padLeft(2, '0');
@@ -650,7 +651,9 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                     SizedBox(
                       width: metricWidth,
                       child: _buildTeacherNextClassMetric(
-                        title: hasActiveClass ? 'CLASE ACTIVA' : 'PRÓXIMA CLASE',
+                        title: hasActiveClass
+                            ? 'CLASE ACTIVA'
+                            : 'PRÓXIMA CLASE',
                         className: targetClassroom?.name ?? 'Sin clase',
                         classTime: nextTime,
                       ),
@@ -918,12 +921,13 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
               final now = _liveNow;
               final filtered = docs
                   .where((doc) {
-                  final classroomIdFromPath =
-                    (doc.data()['classroomId'] ?? '').toString();
-                    if (!classroomIds.contains(classroomIdFromPath)) return false;
+                    final classroomIdFromPath =
+                        (doc.data()['classroomId'] ?? '').toString();
+                    if (!classroomIds.contains(classroomIdFromPath))
+                      return false;
 
                     final data = doc.data();
-                  final ts = data['timestamp'];
+                    final ts = data['timestamp'];
                     DateTime? scanTime;
                     if (ts is Timestamp) {
                       scanTime = ts.toDate();
