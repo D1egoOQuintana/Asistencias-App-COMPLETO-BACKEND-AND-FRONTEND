@@ -301,8 +301,10 @@ async function processAttendanceEvent(event: any) {
       return;
     }
 
-    if (attendanceData.eventDriven === true) {
-      console.log('⏭️ Registro event-driven detectado; se delega al trigger de attendance_events.');
+    const eventDrivenSourceRaw = attendanceData.source || attendanceData.origen || attendanceData.metadata?.createdFrom;
+    const eventDrivenSource = `${eventDrivenSourceRaw ?? ''}`.toLowerCase();
+    if (attendanceData.eventDriven === true && eventDrivenSource === 'attendance_event') {
+      console.log('⏭️ Registro event-driven (attendance_event) detectado; se delega al trigger de attendance_events.');
       await logTelegramEvent({ type: 'skip.eventDriven', docId: event.params.docId });
       return;
     }
@@ -317,7 +319,10 @@ async function processAttendanceEvent(event: any) {
       return;
     }
 
-    const sourceRaw = attendanceData.source || attendanceData.origen || attendanceData.metadata?.createdFrom;
+    const sourceRaw =
+      (eventDrivenSourceRaw ?? attendanceData.source) ||
+      attendanceData.origen ||
+      attendanceData.metadata?.createdFrom;
     const source = `${sourceRaw ?? ''}`.toLowerCase();
     const hasQr = Boolean(
       attendanceData.qrCodeScanned ||
@@ -331,11 +336,21 @@ async function processAttendanceEvent(event: any) {
       await logTelegramEvent({ type: 'skip.source', docId: event.params.docId, source: sourceRaw });
       return;
     }
+    const beforeStatus = beforeData
+      ? `${beforeData.status || beforeData.estado || ''}`.toLowerCase()
+      : '';
+    const beforeSource = beforeData
+      ? `${beforeData.source || beforeData.origen || beforeData.metadata?.createdFrom || ''}`.toLowerCase()
+      : '';
+    const beforeQr = beforeData
+      ? beforeData.qrCodeScanned || beforeData.qrCode || beforeData.qr || beforeData.codigoQr
+      : false;
+    const hadExitBefore = Boolean(beforeData?.exitAt);
+    const hasExitNow = Boolean(attendanceData.exitAt);
+    const exitJustRecorded = !hadExitBefore && hasExitNow;
+
     if (beforeData) {
-      const beforeStatus = `${beforeData.status || beforeData.estado || ''}`.toLowerCase();
-      const beforeSource = `${beforeData.source || beforeData.origen || beforeData.metadata?.createdFrom || ''}`.toLowerCase();
-      const beforeQr = beforeData.qrCodeScanned || beforeData.qrCode || beforeData.qr || beforeData.codigoQr;
-      if (beforeStatus === status && beforeSource === source && Boolean(beforeQr) === hasQr) {
+      if (beforeStatus === status && beforeSource === source && Boolean(beforeQr) === hasQr && !exitJustRecorded) {
         console.log('⏭️ No hubo cambios relevantes, se omite notificación duplicada.');
         await logTelegramEvent({ type: 'skip.noChange', docId: event.params.docId });
         return;
@@ -363,7 +378,20 @@ async function processAttendanceEvent(event: any) {
 
     // Evitar notificaciones duplicadas el mismo día por alumno
     const dayKey = getDayKeyLima(getAttendanceDate(attendanceData));
-    if ((student as any)?.lastTelegramNotifiedDayKey === dayKey) {
+    const eventType: 'entry' | 'exit' = exitJustRecorded ? 'exit' : 'entry';
+    const notificationEventKey = `${dayKey}_${eventType}`;
+    const notifiedEventKeys = (student as any)?.lastTelegramNotifiedEventKeys || {};
+    if (notifiedEventKeys?.[notificationEventKey] === true) {
+      console.log('⏭️ Ya se notificó este evento. Omitiendo envío. key:', notificationEventKey);
+      await logTelegramEvent({
+        type: 'skip.alreadyNotifiedEvent',
+        docId: event.params.docId,
+        studentId,
+        notificationEventKey,
+      });
+      return;
+    }
+    if (!exitJustRecorded && (student as any)?.lastTelegramNotifiedDayKey === dayKey) {
       console.log('⏭️ Ya se notificó hoy. Omitiendo envío. dayKey:', dayKey);
       await logTelegramEvent({ type: 'skip.alreadyNotifiedToday', docId: event.params.docId, studentId, dayKey });
       return;
@@ -372,12 +400,28 @@ async function processAttendanceEvent(event: any) {
       console.log('🆕 Primera vez - enviando código de activación');
       await logTelegramEvent({ type: 'activation.start', docId: event.params.docId, studentId, classroomId });
       await sendActivationCode({ ...student, _id: studentRef.id }, { ...attendanceData, studentId, classroomId });
-      await studentRef.set({ lastTelegramNotifiedDayKey: dayKey }, { merge: true });
+      await studentRef.set({
+        lastTelegramNotifiedDayKey: dayKey,
+        lastTelegramNotifiedEventKeys: {
+          ...(notifiedEventKeys || {}),
+          [notificationEventKey]: true,
+        },
+      }, { merge: true });
     } else {
       console.log('🔁 Ya vinculado - enviando notificación normal');
       await logTelegramEvent({ type: 'regular.start', docId: event.params.docId, studentId, classroomId, chatId: student.parentTelegramChatId });
-      await sendRegularNotification({ ...student, _id: studentRef.id }, { ...attendanceData, studentId, classroomId });
-      await studentRef.set({ lastTelegramNotifiedDayKey: dayKey }, { merge: true });
+      await sendRegularNotification(
+        { ...student, _id: studentRef.id },
+        { ...attendanceData, studentId, classroomId },
+        eventType,
+      );
+      await studentRef.set({
+        lastTelegramNotifiedDayKey: dayKey,
+        lastTelegramNotifiedEventKeys: {
+          ...(notifiedEventKeys || {}),
+          [notificationEventKey]: true,
+        },
+      }, { merge: true });
     }
   } catch (error) {
     console.error('Error enviando notificación de Telegram:', error);

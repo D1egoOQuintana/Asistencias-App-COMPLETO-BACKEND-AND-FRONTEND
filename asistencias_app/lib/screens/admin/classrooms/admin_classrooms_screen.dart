@@ -1,0 +1,1110 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../models/classroom_model.dart';
+import '../../../services/classroom_service.dart';
+import '../../../theme/app_design_system.dart';
+import 'widgets/classroom_form_dialog.dart';
+import 'widgets/assign_teacher_dialog.dart';
+import 'widgets/schedule_config_dialog.dart';
+import '../widgets/admin_ui.dart';
+
+const _kBorder = Color(0xFFE6EAF0);
+const _kCanvas = Color(0xFFF4F6FA);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN SCREEN
+// ─────────────────────────────────────────────────────────────────────────────
+
+class AdminClassroomsScreen extends StatefulWidget {
+  const AdminClassroomsScreen({super.key});
+
+  @override
+  State<AdminClassroomsScreen> createState() => _AdminClassroomsScreenState();
+}
+
+class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  final TextEditingController _search = TextEditingController();
+  String _filterOp = 'all'; // all | ready | no_teacher | no_schedule
+  String _query = '';
+
+  // Fetch active classrooms (getAllClassrooms filters isActive==true).
+  // Inactive classrooms view → TODO Fase 5: add isActive filter toggle.
+  final Stream<QuerySnapshot> _stream = ClassroomService.getAllClassrooms();
+
+  @override
+  void initState() {
+    super.initState();
+    _search.addListener(() => setState(() => _query = _search.text));
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  // ── Filtering ──────────────────────────────────────────────────────────────
+
+  _OpStatus _opStatus(ClassroomModel c) {
+    if (!c.hasTeacher) return _OpStatus.noTeacher;
+    if (!c.hasSchedule) return _OpStatus.noSchedule;
+    return _OpStatus.ready;
+  }
+
+  List<ClassroomModel> _filtered(List<ClassroomModel> all) {
+    var list = all;
+    if (_query.trim().isNotEmpty) {
+      final q = _query.toLowerCase();
+      list = list.where((c) {
+        return c.name.toLowerCase().contains(q) ||
+            c.grade.toLowerCase().contains(q) ||
+            c.section.toLowerCase().contains(q) ||
+            (c.teacherName?.toLowerCase().contains(q) ?? false);
+      }).toList();
+    }
+    if (_filterOp != 'all') {
+      list = list.where((c) {
+        final s = _opStatus(c);
+        return switch (_filterOp) {
+          'ready' => s == _OpStatus.ready,
+          'no_teacher' => s == _OpStatus.noTeacher,
+          'no_schedule' => s == _OpStatus.noSchedule,
+          _ => true,
+        };
+      }).toList();
+    }
+    list.sort((a, b) {
+      final g = a.grade.compareTo(b.grade);
+      return g != 0 ? g : a.section.compareTo(b.section);
+    });
+    return list;
+  }
+
+  // ── Dialogs / actions ──────────────────────────────────────────────────────
+
+  void _showCreateDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => const ClassroomFormDialog(),
+    );
+  }
+
+  void _showEditDialog(ClassroomModel c) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => ClassroomFormDialog(classroom: c),
+    );
+  }
+
+  void _showAssignTeacher(ClassroomModel c) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AssignTeacherDialog(classroom: c),
+    );
+  }
+
+  void _showSchedule(ClassroomModel c) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => ScheduleConfigDialog(classroom: c),
+    );
+  }
+
+  Future<void> _confirmToggle(ClassroomModel c) async {
+    final action = c.isActive ? 'desactivar' : 'activar';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: AppDesignSystem.borderRadiusLG),
+        title: Text(
+          '¿${c.isActive ? 'Desactivar' : 'Activar'} aula?',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          '${c.isActive ? 'Desactivar' : 'Activar'} el aula "${c.name}" '
+          '${c.isActive ? 'la ocultará de los docentes y del sistema.' : 'la volverá a activar.'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: c.isActive
+                  ? AppDesignSystem.errorColor
+                  : AppDesignSystem.successColor,
+            ),
+            child: Text(action[0].toUpperCase() + action.substring(1)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = c.isActive
+        ? await ClassroomService.deactivateClassroom(c.id!)
+        : await ClassroomService.reactivateClassroom(c.id!);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Aula ${c.isActive ? 'desactivada' : 'activada'} correctamente'
+          : 'No se pudo cambiar el estado'),
+      backgroundColor:
+          ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+    ));
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width >= AppDesignSystem.breakpointDesktop;
+    final isWeb = width >= AppDesignSystem.breakpointMobile;
+    final pad = AdminUi.pagePadding(width);
+
+    return Scaffold(
+      backgroundColor: _kCanvas,
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(pad, pad, pad, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildPageHeader(isDesktop),
+                  const SizedBox(height: 16),
+                  _buildFilterBar(),
+                  const SizedBox(height: 16),
+                  _buildTable(isWeb),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Page header ────────────────────────────────────────────────────────────
+
+  Widget _buildPageHeader(bool isDesktop) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Gestión de Aulas',
+                style: TextStyle(
+                  fontSize: isDesktop ? 16 : 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppDesignSystem.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Administra aulas, docentes asignados y horarios operativos',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppDesignSystem.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        FilledButton.icon(
+          onPressed: _showCreateDialog,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppDesignSystem.primaryColor,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            shape: RoundedRectangleBorder(
+                borderRadius: AppDesignSystem.borderRadiusMD),
+          ),
+          icon: const Icon(Icons.add_rounded, size: 20),
+          label: const Text(
+            'Nueva aula',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Filter bar ─────────────────────────────────────────────────────────────
+
+  Widget _buildFilterBar() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: AdminUi.cardDecoration(elevated: false),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Search
+          TextField(
+            controller: _search,
+            decoration: InputDecoration(
+              hintText: 'Buscar por nombre, grado, sección o docente…',
+              hintStyle: const TextStyle(
+                  fontSize: 13, color: AppDesignSystem.textSecondary),
+              prefixIcon: const Icon(Icons.search_rounded,
+                  size: 20, color: AppDesignSystem.textSecondary),
+              suffixIcon: _query.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          size: 18, color: AppDesignSystem.textSecondary),
+                      onPressed: () {
+                        _search.clear();
+                        setState(() => _query = '');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: _kCanvas,
+              border: OutlineInputBorder(
+                borderRadius: AppDesignSystem.borderRadiusFull,
+                borderSide: const BorderSide(color: _kBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: AppDesignSystem.borderRadiusFull,
+                borderSide: const BorderSide(color: _kBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: AppDesignSystem.borderRadiusFull,
+                borderSide: const BorderSide(
+                    color: AppDesignSystem.primaryColor, width: 2),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Operational status filters
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                const Text(
+                  'Estado operativo:',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppDesignSystem.textSecondary,
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 10),
+                ..._buildFilterChips(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildFilterChips() {
+    final options = [
+      ('all', 'Todas', Icons.filter_list_rounded),
+      ('ready', 'Listas', Icons.check_circle_outline_rounded),
+      ('no_teacher', 'Sin docente', Icons.person_off_outlined),
+      ('no_schedule', 'Sin horario', Icons.schedule_rounded),
+    ];
+
+    return options.map((opt) {
+      final (key, label, icon) = opt;
+      final selected = _filterOp == key;
+      return AdminFilterChip(
+        label: label,
+        selected: selected,
+        icon: icon,
+        onTap: () => setState(() => _filterOp = key),
+      );
+    }).toList();
+  }
+
+  // ── Table / cards ──────────────────────────────────────────────────────────
+
+  Widget _buildTable(bool showTable) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _stream,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return _skeleton();
+        }
+        if (snap.hasError) {
+          return _errorCard();
+        }
+
+        final allModels = (snap.data?.docs ?? [])
+            .map((d) => ClassroomModel.fromFirestore(d))
+            .toList();
+        final models = _filtered(allModels);
+
+        return Container(
+          decoration: AdminUi.cardDecoration(elevated: false),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Table header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppDesignSystem.primaryColor.withValues(alpha: 0.08),
+                        borderRadius: AppDesignSystem.borderRadiusSM,
+                      ),
+                      child: const Icon(Icons.class_rounded,
+                          size: 17, color: AppDesignSystem.primaryColor),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Aulas (${models.length})',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppDesignSystem.textPrimary,
+                      ),
+                    ),
+                    if (allModels.length != models.length) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppDesignSystem.warningColor.withValues(alpha: 0.1),
+                          borderRadius: AppDesignSystem.borderRadiusFull,
+                        ),
+                        child: Text(
+                          '${allModels.length} total',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppDesignSystem.warningColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: _kBorder),
+
+              if (models.isEmpty)
+                _emptyState()
+              else if (showTable)
+                _ClassroomsWebTable(
+                  classrooms: models,
+                  opStatus: _opStatus,
+                  onEdit: _showEditDialog,
+                  onAssignTeacher: _showAssignTeacher,
+                  onSchedule: _showSchedule,
+                  onToggle: _confirmToggle,
+                )
+              else
+                _ClassroomsMobileList(
+                  classrooms: models,
+                  opStatus: _opStatus,
+                  onEdit: _showEditDialog,
+                  onAssignTeacher: _showAssignTeacher,
+                  onSchedule: _showSchedule,
+                  onToggle: _confirmToggle,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _skeleton() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppDesignSystem.borderRadiusLG,
+        border: Border.all(color: _kBorder),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: List.generate(
+          5,
+          (i) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Row(
+              children: [
+                _SkeletonBox(
+                    width: 36,
+                    height: 36,
+                    radius: AppDesignSystem.borderRadiusSM),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SkeletonBox(
+                          width: double.infinity,
+                          height: 12,
+                          radius: AppDesignSystem.borderRadiusFull),
+                      const SizedBox(height: 6),
+                      _SkeletonBox(
+                          width: 120,
+                          height: 10,
+                          radius: AppDesignSystem.borderRadiusFull),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _SkeletonBox(
+                    width: 70,
+                    height: 24,
+                    radius: AppDesignSystem.borderRadiusFull),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _errorCard() {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppDesignSystem.borderRadiusLG,
+        border: Border.all(color: _kBorder),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.error_outline_rounded,
+                size: 36, color: AppDesignSystem.errorColor),
+            const SizedBox(height: 8),
+            const Text(
+              'Error al cargar aulas',
+              style: TextStyle(
+                  color: AppDesignSystem.errorColor, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(Icons.class_outlined,
+                size: 48, color: AppDesignSystem.textDisabled),
+            const SizedBox(height: 12),
+            Text(
+              _query.isNotEmpty || _filterOp != 'all'
+                  ? 'Sin resultados para el filtro aplicado'
+                  : 'No hay aulas registradas',
+              style: const TextStyle(
+                  fontSize: 14,
+                  color: AppDesignSystem.textSecondary,
+                  fontWeight: FontWeight.w500),
+            ),
+            if (_query.isEmpty && _filterOp == 'all') ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _showCreateDialog,
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text('Crear primera aula'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPERATIONAL STATUS ENUM
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _OpStatus { ready, noTeacher, noSchedule }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEB TABLE
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ClassroomsWebTable extends StatelessWidget {
+  final List<ClassroomModel> classrooms;
+  final _OpStatus Function(ClassroomModel) opStatus;
+  final void Function(ClassroomModel) onEdit;
+  final void Function(ClassroomModel) onAssignTeacher;
+  final void Function(ClassroomModel) onSchedule;
+  final void Function(ClassroomModel) onToggle;
+
+  const _ClassroomsWebTable({
+    required this.classrooms,
+    required this.opStatus,
+    required this.onEdit,
+    required this.onAssignTeacher,
+    required this.onSchedule,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Header row
+        Container(
+          color: _kCanvas,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: const Row(
+            children: [
+              SizedBox(width: 36),
+              SizedBox(width: 12),
+              Expanded(flex: 4, child: _ColHeader('AULA')),
+              Expanded(flex: 2, child: _ColHeader('GRADO / SEC')),
+              Expanded(flex: 4, child: _ColHeader('DOCENTE')),
+              Expanded(flex: 3, child: _ColHeader('HORARIO')),
+              Expanded(flex: 3, child: _ColHeader('ESTADO OPERATIVO')),
+              SizedBox(width: 120), // actions
+            ],
+          ),
+        ),
+        // Data rows
+        ...classrooms.asMap().entries.map((e) {
+          return _ClassroomTableRow(
+            classroom: e.value,
+            status: opStatus(e.value),
+            isLast: e.key == classrooms.length - 1,
+            onEdit: onEdit,
+            onAssignTeacher: onAssignTeacher,
+            onSchedule: onSchedule,
+            onToggle: onToggle,
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _ColHeader extends StatelessWidget {
+  final String text;
+  const _ColHeader(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: AdminUi.tableHeaderTextStyle,
+    );
+  }
+}
+
+class _ClassroomTableRow extends StatefulWidget {
+  final ClassroomModel classroom;
+  final _OpStatus status;
+  final bool isLast;
+  final void Function(ClassroomModel) onEdit;
+  final void Function(ClassroomModel) onAssignTeacher;
+  final void Function(ClassroomModel) onSchedule;
+  final void Function(ClassroomModel) onToggle;
+
+  const _ClassroomTableRow({
+    required this.classroom,
+    required this.status,
+    required this.isLast,
+    required this.onEdit,
+    required this.onAssignTeacher,
+    required this.onSchedule,
+    required this.onToggle,
+  });
+
+  @override
+  State<_ClassroomTableRow> createState() => _ClassroomTableRowState();
+}
+
+class _ClassroomTableRowState extends State<_ClassroomTableRow> {
+  bool _hovered = false;
+
+  String _scheduleLabel() {
+    final s = widget.classroom.schedule;
+    if (s == null || s.isEmpty) return '—';
+    const abbrev = {
+      'monday': 'Lun', 'tuesday': 'Mar', 'wednesday': 'Mié',
+      'thursday': 'Jue', 'friday': 'Vie',
+    };
+    final keys = s.keys.toList()..sort();
+    return keys.map((k) => abbrev[k] ?? k.substring(0, 3)).join(', ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.classroom;
+    final initial = c.grade.isNotEmpty
+        ? c.grade
+        : c.name.substring(0, 1).toUpperCase();
+
+    return Column(
+      children: [
+        if (!widget.isLast) Divider(height: 1, color: _kBorder),
+        MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: AnimatedContainer(
+            duration: AppDesignSystem.durationFast,
+            decoration: AdminUi.rowDecoration(
+              hovered: _hovered,
+              isLast: widget.isLast,
+            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+            child: SizedBox(
+              height: 60,
+              child: Row(
+                children: [
+                  // Initial
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: AppDesignSystem.primaryColor.withValues(alpha: 0.08),
+                      borderRadius: AppDesignSystem.borderRadiusSM,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        color: AppDesignSystem.primaryColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Name
+                  Expanded(
+                    flex: 4,
+                    child: Text(
+                      c.name,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppDesignSystem.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  // Grade / section
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      c.grade.isNotEmpty ? '${c.grade}° ${c.section}' : '—',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppDesignSystem.textSecondary,
+                      ),
+                    ),
+                  ),
+
+                  // Teacher
+                  Expanded(
+                    flex: 4,
+                    child: Row(
+                      children: [
+                        if (!c.hasTeacher)
+                          const Icon(Icons.person_off_outlined,
+                              size: 14,
+                              color: AppDesignSystem.warningColor)
+                        else
+                          const Icon(Icons.person_rounded,
+                              size: 14,
+                              color: AppDesignSystem.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            c.teacherName?.isNotEmpty == true
+                                ? c.teacherName!
+                                : 'Sin asignar',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: c.hasTeacher
+                                  ? AppDesignSystem.textPrimary
+                                  : AppDesignSystem.warningColor,
+                              fontWeight: c.hasTeacher
+                                  ? FontWeight.w500
+                                  : FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Schedule
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      _scheduleLabel(),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: c.hasSchedule
+                            ? AppDesignSystem.textSecondary
+                            : AppDesignSystem.infoColor,
+                        fontWeight: c.hasSchedule
+                            ? FontWeight.w500
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                  // Operational status chip
+                  Expanded(
+                    flex: 3,
+                    child: _OpStatusChip(status: widget.status),
+                  ),
+
+                  // Actions
+                  SizedBox(
+                    width: 120,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _ActionIcon(
+                          icon: Icons.edit_outlined,
+                          tooltip: 'Editar',
+                          color: AppDesignSystem.primaryColor,
+                          onTap: () => widget.onEdit(c),
+                        ),
+                        _ActionIcon(
+                          icon: Icons.person_add_alt_1_rounded,
+                          tooltip: 'Asignar docente',
+                          color: const Color(0xFF1565C0),
+                          onTap: () => widget.onAssignTeacher(c),
+                        ),
+                        _ActionIcon(
+                          icon: Icons.schedule_rounded,
+                          tooltip: 'Configurar horario',
+                          color: AppDesignSystem.successColor,
+                          onTap: () => widget.onSchedule(c),
+                        ),
+                        _ActionIcon(
+                          icon: Icons.power_settings_new_rounded,
+                          tooltip: c.isActive ? 'Desactivar' : 'Activar',
+                          color: c.isActive
+                              ? AppDesignSystem.errorColor
+                              : AppDesignSystem.successColor,
+                          onTap: () => widget.onToggle(c),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MOBILE CARDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ClassroomsMobileList extends StatelessWidget {
+  final List<ClassroomModel> classrooms;
+  final _OpStatus Function(ClassroomModel) opStatus;
+  final void Function(ClassroomModel) onEdit;
+  final void Function(ClassroomModel) onAssignTeacher;
+  final void Function(ClassroomModel) onSchedule;
+  final void Function(ClassroomModel) onToggle;
+
+  const _ClassroomsMobileList({
+    required this.classrooms,
+    required this.opStatus,
+    required this.onEdit,
+    required this.onAssignTeacher,
+    required this.onSchedule,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: classrooms.length,
+      separatorBuilder: (_, __) => Divider(height: 1, color: _kBorder),
+      itemBuilder: (ctx, i) {
+        final c = classrooms[i];
+        final initial = c.grade.isNotEmpty
+            ? c.grade
+            : c.name.substring(0, 1).toUpperCase();
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppDesignSystem.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: AppDesignSystem.borderRadiusMD,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: AppDesignSystem.primaryColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            c.name,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppDesignSystem.textPrimary,
+                            ),
+                          ),
+                        ),
+                        _OpStatusChip(status: opStatus(c)),
+                      ],
+                    ),
+                    if (c.grade.isNotEmpty)
+                      Text(
+                        '${c.grade}° ${c.section} · Cap. ${c.capacity}',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppDesignSystem.textSecondary),
+                      ),
+                    Text(
+                      c.hasTeacher ? (c.teacherName ?? '') : 'Sin docente',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: c.hasTeacher
+                            ? AppDesignSystem.textSecondary
+                            : AppDesignSystem.warningColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _MobileActionChip(
+                          label: 'Editar',
+                          icon: Icons.edit_outlined,
+                          onTap: () => onEdit(c),
+                        ),
+                        const SizedBox(width: 6),
+                        _MobileActionChip(
+                          label: 'Docente',
+                          icon: Icons.person_add_alt_1_rounded,
+                          onTap: () => onAssignTeacher(c),
+                        ),
+                        const SizedBox(width: 6),
+                        _MobileActionChip(
+                          label: 'Horario',
+                          icon: Icons.schedule_rounded,
+                          onTap: () => onSchedule(c),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED WIDGETS
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OpStatusChip extends StatelessWidget {
+  final _OpStatus status;
+  const _OpStatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, bg) = switch (status) {
+      _OpStatus.ready => (
+          'Lista',
+          AppDesignSystem.successColor,
+          const Color(0xFFE6F4EA),
+        ),
+      _OpStatus.noTeacher => (
+          'Sin docente',
+          AppDesignSystem.warningColor,
+          const Color(0xFFFFF3E0),
+        ),
+      _OpStatus.noSchedule => (
+          'Sin horario',
+          AppDesignSystem.infoColor,
+          const Color(0xFFE3F0FC),
+        ),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: AppDesignSystem.borderRadiusFull,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = color == AppDesignSystem.errorColor
+        ? AppDesignSystem.errorColor
+        : AdminUi.neutralAction;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: AppDesignSystem.borderRadiusSM,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(icon, size: 17, color: fg),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileActionChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _MobileActionChip({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: AppDesignSystem.borderRadiusFull,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: _kCanvas,
+          borderRadius: AppDesignSystem.borderRadiusFull,
+          border: Border.all(color: _kBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: AppDesignSystem.primaryColor),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppDesignSystem.primaryColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  final double width;
+  final double height;
+  final BorderRadius radius;
+
+  const _SkeletonBox({
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: const Color(0xFFECEFF1),
+        borderRadius: radius,
+      ),
+    );
+  }
+}

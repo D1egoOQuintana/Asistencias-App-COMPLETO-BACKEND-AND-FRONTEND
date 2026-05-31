@@ -650,8 +650,9 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(classroomId)
           .collection('attendance')
-          .where('classroomId', isEqualTo: classroomId)
           .where('date', isEqualTo: dateKey)
           .snapshots(),
       builder: (context, snapshot) {
@@ -1242,7 +1243,9 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
 
       final attendanceId = '${studentId}_$dateKey';
 
-      final attendanceRef = FirebaseFirestore.instance
+        final attendanceRef = FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(widget.classroom.id)
           .collection('attendance')
           .doc(attendanceId);
       final entryEventRef = FirebaseFirestore.instance
@@ -1454,8 +1457,9 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
     final dateKey =
         '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
     return FirebaseFirestore.instance
-        .collection('attendance')
-        .where('classroomId', isEqualTo: classroomId)
+      .collection('classrooms')
+      .doc(classroomId)
+      .collection('attendance')
         .where('date', isEqualTo: dateKey)
         .snapshots();
   }
@@ -1497,26 +1501,30 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   Future<void> _loadAttendanceForDay(DateTime day) async {
     if (!mounted) return;
 
-    final dateKey =
-        '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    final dateKey = _formatDate(day);
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('attendances')
-          .doc('${widget.classroom.id}_$dateKey')
+      final snap = await FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(widget.classroom.id)
+          .collection('attendance')
+          .where('date', isEqualTo: dateKey)
           .get();
 
       if (!mounted) return;
 
-      if (doc.exists) {
-        setState(() {
-          _attendanceData = doc.data() ?? {};
-        });
-      } else {
-        setState(() {
-          _attendanceData = {};
-        });
+      final dayMap = <String, dynamic>{};
+      for (final d in snap.docs) {
+        final data = d.data();
+        final sid = (data['studentId'] ?? '').toString();
+        if (sid.isNotEmpty) {
+          dayMap[sid] = data;
+        }
       }
+
+      setState(() {
+        _attendanceData = dayMap;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -2463,8 +2471,9 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
           '-${widget.selectedDay.day.toString().padLeft(2, '0')}';
 
       final snap = await FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(widget.classroom.id)
           .collection('attendance')
-          .where('classroomId', isEqualTo: widget.classroom.id)
           .where('date', isEqualTo: dateKey)
           .get();
 
@@ -2752,6 +2761,8 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
           // Escribir/actualizar estado 'absent' en lugar de eliminar
           if (existingId != null) {
             final docRef = FirebaseFirestore.instance
+                .collection('classrooms')
+                .doc(widget.classroom.id)
                 .collection('attendance')
                 .doc(existingId);
             batch.update(docRef, {
@@ -2763,6 +2774,8 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
             });
           } else {
             final docRef = FirebaseFirestore.instance
+                .collection('classrooms')
+                .doc(widget.classroom.id)
                 .collection('attendance')
                 .doc(deterministicId);
             batch.set(docRef, {
@@ -2784,6 +2797,8 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
 
         if (existingId != null) {
           final docRef = FirebaseFirestore.instance
+              .collection('classrooms')
+              .doc(widget.classroom.id)
               .collection('attendance')
               .doc(existingId);
           batch.update(docRef, {
@@ -2794,6 +2809,8 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
           });
         } else {
           final docRef = FirebaseFirestore.instance
+              .collection('classrooms')
+              .doc(widget.classroom.id)
               .collection('attendance')
               .doc(deterministicId);
           batch.set(docRef, {

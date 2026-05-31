@@ -156,6 +156,8 @@ class _QuickQRAttendanceScreenState extends State<QuickQRAttendanceScreen> {
     try {
       // Contar asistencias de la sesión
       final attendanceSnapshot = await FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(_selectedClassroom!.id)
           .collection('attendance')
           .where('sessionId', isEqualTo: _sessionId)
           .get();
@@ -281,9 +283,10 @@ class _QuickQRAttendanceScreenState extends State<QuickQRAttendanceScreen> {
       final attendanceId = '${studentId}_$dateKey';
 
       // Pre-chequeo de duplicados
-      final existing = await FirebaseFirestore.instance
+        final existing = await FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(_selectedClassroom!.id)
           .collection('attendance')
-          .where('classroomId', isEqualTo: _selectedClassroom!.id)
           .where('studentId', isEqualTo: studentId)
           .where('date', isEqualTo: dateKey)
           .limit(1)
@@ -302,8 +305,10 @@ class _QuickQRAttendanceScreenState extends State<QuickQRAttendanceScreen> {
       // Registrar asistencia de forma atómica
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final ref = FirebaseFirestore.instance
-            .collection('attendance')
-            .doc(attendanceId);
+          .collection('classrooms')
+          .doc(_selectedClassroom!.id)
+          .collection('attendance')
+          .doc(attendanceId);
 
         final snap = await tx.get(ref);
         if (snap.exists) {
@@ -902,6 +907,8 @@ class _QuickQRAttendanceScreenState extends State<QuickQRAttendanceScreen> {
               SizedBox(height: isSmall ? 16 : 20),
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
+                    .collection('classrooms')
+                    .doc(_selectedClassroom!.id)
                     .collection('attendance')
                     .where('sessionId', isEqualTo: _sessionId)
                     .orderBy('timestamp', descending: true)

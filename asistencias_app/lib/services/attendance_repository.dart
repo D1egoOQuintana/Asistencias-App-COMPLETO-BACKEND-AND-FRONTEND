@@ -43,8 +43,9 @@ class AttendanceRepository {
     }
   }
 
-  CollectionReference<Map<String, dynamic>> attendance() =>
-      _db.collection('attendance');
+  CollectionReference<Map<String, dynamic>> _classroomAttendance(
+    String classroomId,
+  ) => _db.collection('classrooms').doc(classroomId).collection('attendance');
 
   /// Stream de entradas de asistencia para un día concreto (sincronización con QR)
   Stream<List<AttendanceEntry>> entriesForDayStream({
@@ -53,8 +54,7 @@ class AttendanceRepository {
   }) {
     final dateKey =
         '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-    return attendance()
-        .where('classroomId', isEqualTo: classroomId)
+    return _classroomAttendance(classroomId)
         .where('date', isEqualTo: dateKey)
         .snapshots()
         .map((snap) {
@@ -71,8 +71,7 @@ class AttendanceRepository {
   }) async {
     final dateKey =
         '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-    final q = await attendance()
-        .where('classroomId', isEqualTo: classroomId)
+    final q = await _classroomAttendance(classroomId)
         .where('date', isEqualTo: dateKey)
         .limit(1)
         .get();
@@ -91,7 +90,7 @@ class AttendanceRepository {
     final dateKey =
         '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final legacyId = '${studentId}_$dateKey';
-    await attendance().doc(legacyId).set({
+    await _classroomAttendance(classroomId).doc(legacyId).set({
       'classroomId': classroomId,
       'studentId': studentId,
       'status': _legacyStatus(status),
@@ -114,7 +113,8 @@ class AttendanceRepository {
     final now = when ?? DateTime.now();
     final dateKey =
         '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final attendanceRef = attendance().doc('${studentId}_$dateKey');
+    final attendanceRef =
+      _classroomAttendance(classroomId).doc('${studentId}_$dateKey');
 
     return _db.runTransaction((tx) async {
       final attendanceSnap = await tx.get(attendanceRef);

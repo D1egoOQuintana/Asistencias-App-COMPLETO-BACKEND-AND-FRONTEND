@@ -8,6 +8,13 @@ class AttendanceService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  static CollectionReference<Map<String, dynamic>> _classroomAttendance(
+    String classroomId,
+  ) => _firestore
+      .collection('classrooms')
+      .doc(classroomId)
+      .collection('attendance');
+
   /// Registrar asistencia de un estudiante
   static Future<Map<String, dynamic>> recordAttendance({
     required String studentId,
@@ -62,8 +69,7 @@ class AttendanceService {
       final today = DateTime(now.year, now.month, now.day);
 
       // Verificar si ya existe asistencia para hoy
-      final existingAttendance = await _firestore
-          .collection('attendance')
+        final existingAttendance = await _classroomAttendance(student.classroomId)
           .where('studentId', isEqualTo: studentId)
           .where('date', isEqualTo: Timestamp.fromDate(today))
           .get();
@@ -100,8 +106,7 @@ class AttendanceService {
       );
 
       // Guardar en Firestore
-      final docRef = await _firestore
-          .collection('attendance')
+        final docRef = await _classroomAttendance(student.classroomId)
           .add(attendance.toMap());
 
       return {
@@ -163,8 +168,9 @@ class AttendanceService {
     final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
     return _firestore
-        .collection('attendance')
-        .where('classroomId', isEqualTo: classroomId)
+      .collection('classrooms')
+      .doc(classroomId)
+      .collection('attendance')
         .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(dayStart))
         .where('date', isLessThanOrEqualTo: Timestamp.fromDate(dayEnd))
         .orderBy('date')
@@ -180,7 +186,7 @@ class AttendanceService {
   }) async {
     try {
       final query = await _firestore
-          .collection('attendance')
+          .collectionGroup('attendance')
           .where('studentId', isEqualTo: studentId)
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
           .where('date', isLessThanOrEqualTo: Timestamp.fromDate(endDate))

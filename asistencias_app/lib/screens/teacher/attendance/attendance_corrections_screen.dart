@@ -43,9 +43,44 @@ class _AttendanceCorrectionsScreenState
 
   Query<Map<String, dynamic>> _queryForSelectedDay() {
     return FirebaseFirestore.instance
-        .collection('attendance')
-        .where('classroomId', isEqualTo: widget.classroomId)
-        .where('date', isEqualTo: _dateKey(_selectedDay));
+      .collection('classrooms')
+      .doc(widget.classroomId)
+      .collection('attendance');
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool _matchesSelectedDay(Map<String, dynamic> data) {
+    final selected = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+    );
+
+    final dateField = data['date'];
+    if (dateField is String && dateField == _dateKey(selected)) {
+      return true;
+    }
+    if (dateField is Timestamp && _isSameDay(dateField.toDate().toLocal(), selected)) {
+      return true;
+    }
+    if (dateField is DateTime && _isSameDay(dateField.toLocal(), selected)) {
+      return true;
+    }
+
+    final entryAt = data['entryAt'];
+    if (entryAt is Timestamp && _isSameDay(entryAt.toDate().toLocal(), selected)) {
+      return true;
+    }
+
+    final timestamp = data['timestamp'];
+    if (timestamp is Timestamp && _isSameDay(timestamp.toDate().toLocal(), selected)) {
+      return true;
+    }
+
+    return false;
   }
 
   Future<void> _pickDate() async {
@@ -238,7 +273,10 @@ class _AttendanceCorrectionsScreenState
                   );
                 }
 
-                final docs = snapshot.data?.docs ?? [];
+                final docs = (snapshot.data?.docs ?? [])
+                  .where((doc) => _matchesSelectedDay(doc.data()))
+                  .toList();
+
                 docs.sort((a, b) {
                   final ta = (a.data()['timestamp'] as Timestamp?)?.toDate();
                   final tb = (b.data()['timestamp'] as Timestamp?)?.toDate();

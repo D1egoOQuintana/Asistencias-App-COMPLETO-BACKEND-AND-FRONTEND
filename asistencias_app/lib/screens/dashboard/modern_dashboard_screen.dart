@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
+import '../admin/admin_shell.dart';
 import '../admin/teachers/teachers_management_screen.dart';
 import '../admin/students/improved_student_screen.dart';
 import '../admin/classrooms/improved_classroom_screen.dart';
@@ -126,6 +127,11 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
 
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // Admin uses its own dedicated shell — no docente code is touched below.
+    if (user.role == UserRole.admin) {
+      return const AdminShell();
     }
 
     final isTeacher = user.role == UserRole.docente;

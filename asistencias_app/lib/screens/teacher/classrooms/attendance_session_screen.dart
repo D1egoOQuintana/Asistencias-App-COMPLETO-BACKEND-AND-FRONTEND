@@ -82,7 +82,9 @@ class _AttendanceSessionScreenState extends State<AttendanceSessionScreen> {
     // print('Starting to listen to attendance for session: $_sessionId');
 
     FirebaseFirestore.instance
-        .collection('attendance')
+      .collection('classrooms')
+      .doc(widget.classroom.id)
+      .collection('attendance')
         .where('sessionId', isEqualTo: _sessionId)
         .orderBy('timestamp', descending: true)
         .snapshots()
@@ -181,8 +183,9 @@ class _AttendanceSessionScreenState extends State<AttendanceSessionScreen> {
 
       // Pre-chequeo: evitar duplicar si ya existe un registro para hoy con ID aleatorio
       final legacyExisting = await FirebaseFirestore.instance
+          .collection('classrooms')
+          .doc(classroomId)
           .collection('attendance')
-          .where('classroomId', isEqualTo: classroomId)
           .where('studentId', isEqualTo: studentId)
           .where('date', isEqualTo: dayKey)
           .limit(1)
@@ -193,7 +196,9 @@ class _AttendanceSessionScreenState extends State<AttendanceSessionScreen> {
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final attendanceRef = FirebaseFirestore.instance
-            .collection('attendance')
+          .collection('classrooms')
+          .doc(classroomId)
+          .collection('attendance')
             .doc(attendanceId);
 
         final existing = await transaction.get(attendanceRef);

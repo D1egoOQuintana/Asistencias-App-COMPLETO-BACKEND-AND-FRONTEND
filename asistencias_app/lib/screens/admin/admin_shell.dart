@@ -1,0 +1,1040 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../theme/app_design_system.dart';
+import 'dashboard/admin_dashboard_screen.dart';
+import 'teachers/admin_teachers_screen.dart';
+// ImprovedStudentScreen se conserva como respaldo legacy en su archivo original.
+import 'students/admin_students_screen.dart';
+// ImprovedClassroomScreen se conserva como respaldo legacy en su archivo original.
+import 'classrooms/admin_classrooms_screen.dart';
+import 'sessions/admin_sessions_screen.dart';
+import 'placeholders/admin_placeholder_screen.dart';
+
+/// Paleta del Admin Web Panel (ver ADMIN_DESIGN_GUIDE.md).
+const _kCanvas = Color(0xFFF4F6FA);
+const _kNavy = Color(0xFF0D1B2A);
+const _kNavyText = Color(0xFFB0BEC5);
+const _kNavySection = Color(0xFF6B7A8D);
+const _kPrimary = Color(0xFF1976D2);
+const _kPrimaryLight = Color(0xFF42A5F5);
+const _kBorder = Color(0xFFE6EAF0);
+
+/// Shell responsivo del panel de administración.
+/// Desktop (≥1200px): sidebar expandido 240px + topbar 64px.
+/// Tablet  (600–1199px): rail compacto navy 72px + topbar 56px.
+/// Mobile  (<600px): AppBar navy + BottomNavigationBar.
+class AdminShell extends StatefulWidget {
+  const AdminShell({super.key});
+
+  @override
+  State<AdminShell> createState() => _AdminShellState();
+}
+
+class _AdminShellState extends State<AdminShell>
+    with AutomaticKeepAliveClientMixin {
+  int _selectedIndex = 0;
+  late final List<Widget> _screens;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = _buildScreens();
+  }
+
+  List<Widget> _buildScreens() => [
+        AdminDashboardScreen(
+          onNavigate: (i) => setState(() => _selectedIndex = i),
+        ),
+        const AdminTeachersScreen(),
+        const AdminStudentsScreen(),
+        const AdminClassroomsScreen(),
+        const AdminSessionsScreen(),
+        const AdminPlaceholderScreen(
+          title: 'Reportes Institucionales',
+          description:
+              'Genera reportes globales de asistencia por aula, docente y período académico.',
+          icon: Icons.bar_chart_rounded,
+          accentColor: Color(0xFF00695C),
+          bullets: [
+            'Generar reportes consolidados de asistencia en PDF y Excel.',
+            'Comparar porcentajes de asistencia entre aulas y períodos.',
+            'Exportar y compartir reportes con la dirección y la UGEL.',
+          ],
+        ),
+        const AdminPlaceholderScreen(
+          title: 'Incidencias',
+          description:
+              'Registro y seguimiento de incidencias, tardanzas e inasistencias reiteradas.',
+          icon: Icons.warning_amber_rounded,
+          accentColor: Color(0xFFE65100),
+          bullets: [
+            'Recibir alertas automáticas de inasistencias reiteradas.',
+            'Registrar y clasificar incidencias por severidad.',
+            'Notificar a apoderados vía la integración de Telegram.',
+          ],
+        ),
+        const AdminPlaceholderScreen(
+          title: 'Configuración',
+          description:
+              'Gestiona períodos académicos, códigos de activación e integraciones del sistema.',
+          icon: Icons.settings_rounded,
+          accentColor: Color(0xFF6A1B9A),
+          bullets: [
+            'Administrar períodos académicos y cierre de año escolar.',
+            'Generar y revocar códigos de activación de cuentas.',
+            'Configurar la integración con el bot de Telegram.',
+          ],
+        ),
+      ];
+
+  // ── Módulos (orden = índice de _screens) ──────────────────────────────────
+
+  static const _modules = <_AdminModule>[
+    _AdminModule(
+      label: 'Dashboard',
+      subtitle: 'Resumen general del sistema',
+      icon: Icons.dashboard_outlined,
+      iconSelected: Icons.dashboard_rounded,
+      section: 'PRINCIPAL',
+    ),
+    _AdminModule(
+      label: 'Docentes',
+      subtitle: 'Gestión del personal docente',
+      icon: Icons.school_outlined,
+      iconSelected: Icons.school_rounded,
+      section: 'GESTIÓN',
+    ),
+    _AdminModule(
+      label: 'Estudiantes',
+      subtitle: 'Registro y administración de alumnos',
+      icon: Icons.people_outline_rounded,
+      iconSelected: Icons.people_rounded,
+      section: 'GESTIÓN',
+    ),
+    _AdminModule(
+      label: 'Aulas',
+      subtitle: 'Aulas, grados y asignación de docentes',
+      icon: Icons.class_outlined,
+      iconSelected: Icons.class_rounded,
+      section: 'GESTIÓN',
+    ),
+    _AdminModule(
+      label: 'Sesiones',
+      subtitle: 'Sesiones de asistencia por aula y fecha',
+      icon: Icons.event_note_outlined,
+      iconSelected: Icons.event_note_rounded,
+      section: 'OPERACIÓN',
+    ),
+    _AdminModule(
+      label: 'Reportes',
+      subtitle: 'Reportes institucionales de asistencia',
+      icon: Icons.bar_chart_outlined,
+      iconSelected: Icons.bar_chart_rounded,
+      section: 'OPERACIÓN',
+      isPlaceholder: true,
+    ),
+    _AdminModule(
+      label: 'Incidencias',
+      subtitle: 'Alertas y seguimiento de incidencias',
+      icon: Icons.warning_amber_outlined,
+      iconSelected: Icons.warning_amber_rounded,
+      section: 'OPERACIÓN',
+      isPlaceholder: true,
+    ),
+    _AdminModule(
+      label: 'Configuración',
+      subtitle: 'Parámetros y ajustes del sistema',
+      icon: Icons.settings_outlined,
+      iconSelected: Icons.settings_rounded,
+      section: 'SISTEMA',
+      isPlaceholder: true,
+    ),
+  ];
+
+  // ── Pantallas (IndexedStack preserva estado; ver _buildScreens) ─────────
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final width = MediaQuery.of(context).size.width;
+
+    if (width >= AppDesignSystem.breakpointDesktop) {
+      return _buildWeb(expanded: true);
+    }
+    if (width >= AppDesignSystem.breakpointMobile) {
+      return _buildWeb(expanded: false);
+    }
+    return _buildMobile();
+  }
+
+  // ── Layout web (desktop + tablet comparten estructura) ─────────────────────
+
+  Widget _buildWeb({required bool expanded}) {
+    final module = _modules[_selectedIndex];
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+
+    return Scaffold(
+      backgroundColor: _kCanvas,
+      body: Row(
+        children: [
+          _AdminSidebar(
+            modules: _modules,
+            selectedIndex: _selectedIndex,
+            expanded: expanded,
+            userName: user?.fullName ?? 'Administrador',
+            userRole: user?.role.displayName ?? 'Administrador',
+            initials: _initials(user?.fullName ?? ''),
+            onSelect: (i) => setState(() => _selectedIndex = i),
+            onLogout: () => _confirmLogout(context),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                _AdminTopbar(
+                  title: module.label,
+                  subtitle: module.subtitle,
+                  expanded: expanded,
+                  initials: _initials(user?.fullName ?? ''),
+                  userName: user?.fullName ?? 'Administrador',
+                ),
+                Expanded(
+                  child: IndexedStack(
+                    index: _selectedIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Layout mobile ──────────────────────────────────────────────────────────
+
+  Widget _buildMobile() {
+    final mobileModules = [
+      _modules[0],
+      _modules[1],
+      _modules[2],
+      _modules[3],
+      _modules[4],
+    ];
+
+    return Scaffold(
+      backgroundColor: _kCanvas,
+      appBar: _buildMobileAppBar(),
+      body: IndexedStack(index: _selectedIndex, children: _screens),
+      bottomNavigationBar: _buildMobileBottomNav(mobileModules),
+    );
+  }
+
+  PreferredSizeWidget _buildMobileAppBar() {
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    final initials = _initials(user?.fullName ?? '');
+    final moduleName = _modules[_selectedIndex.clamp(0, _modules.length - 1)].label;
+
+    return AppBar(
+      backgroundColor: _kNavy,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      titleSpacing: 0,
+      title: Text(
+        moduleName,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 17,
+        ),
+      ),
+      leading: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _kPrimary,
+            borderRadius: AppDesignSystem.borderRadiusSM,
+          ),
+          child: const Icon(
+            Icons.admin_panel_settings_rounded,
+            color: Colors.white,
+            size: 18,
+          ),
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_rounded, size: 22),
+          tooltip: 'Notificaciones',
+          onPressed: () {},
+        ),
+        if (initials.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: CircleAvatar(
+              radius: 16,
+              backgroundColor: _kPrimary,
+              child: Text(
+                initials,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        IconButton(
+          icon: const Icon(Icons.logout_rounded, size: 20),
+          tooltip: 'Cerrar sesión',
+          onPressed: () => _confirmLogout(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileBottomNav(List<_AdminModule> modules) {
+    final effectiveIndex = _selectedIndex.clamp(0, modules.length - 1);
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 8,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(
+            children: List.generate(modules.length, (i) {
+              final m = modules[i];
+              final selected = effectiveIndex == i;
+              return Expanded(
+                child: InkWell(
+                  borderRadius: AppDesignSystem.borderRadiusMD,
+                  onTap: () => setState(() => _selectedIndex = i),
+                  child: AnimatedContainer(
+                    duration: AppDesignSystem.durationFast,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? _kPrimary.withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: AppDesignSystem.borderRadiusMD,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          selected ? m.iconSelected : m.icon,
+                          size: 22,
+                          color: selected ? _kPrimary : Colors.grey.shade500,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          m.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                            color:
+                                selected ? _kPrimary : Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  String _initials(String fullName) {
+    final parts = fullName.trim().split(' ').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  void _confirmLogout(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: AppDesignSystem.borderRadiusLG,
+        ),
+        title: const Text(
+          'Cerrar sesión',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: const Text('Se cerrará tu sesión en este dispositivo.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppDesignSystem.errorColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppDesignSystem.borderRadiusMD,
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Provider.of<AuthProvider>(context, listen: false).signOut();
+            },
+            child: const Text('Sí, salir'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOPBAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AdminTopbar extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool expanded;
+  final String initials;
+  final String userName;
+
+  const _AdminTopbar({
+    required this.title,
+    required this.subtitle,
+    required this.expanded,
+    required this.initials,
+    required this.userName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: expanded ? 64 : 56,
+      padding: EdgeInsets.symmetric(horizontal: expanded ? 24 : 16),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: _kBorder)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppDesignSystem.textPrimary,
+                    letterSpacing: -0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (expanded)
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppDesignSystem.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          if (expanded) ...[
+            _buildSearchBox(),
+            const SizedBox(width: 16),
+          ] else
+            IconButton(
+              icon: const Icon(Icons.search_rounded, color: Color(0xFF5A6B7B)),
+              tooltip: 'Buscar',
+              onPressed: () {},
+            ),
+          _buildNotifications(),
+          const SizedBox(width: 12),
+          _buildProfile(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBox() {
+    return Container(
+      width: 280,
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: _kCanvas,
+        borderRadius: AppDesignSystem.borderRadiusFull,
+        border: Border.all(color: _kBorder),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.search_rounded, size: 18, color: Color(0xFF9AA7B4)),
+          SizedBox(width: 10),
+          Text(
+            'Buscar…',
+            style: TextStyle(fontSize: 13, color: Color(0xFF9AA7B4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotifications() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(
+            Icons.notifications_none_rounded,
+            color: Color(0xFF5A6B7B),
+          ),
+          tooltip: 'Notificaciones',
+          onPressed: () {},
+        ),
+        Positioned(
+          right: 10,
+          top: 10,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: AppDesignSystem.errorColor,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfile() {
+    final avatar = CircleAvatar(
+      radius: 18,
+      backgroundColor: _kPrimary,
+      child: Text(
+        initials.isEmpty ? 'A' : initials,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+
+    if (!expanded) return avatar;
+
+    return Row(
+      children: [
+        avatar,
+        const SizedBox(width: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 140),
+          child: Text(
+            userName,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppDesignSystem.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 2),
+        const Icon(
+          Icons.keyboard_arrow_down_rounded,
+          size: 18,
+          color: Color(0xFF9AA7B4),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SIDEBAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AdminSidebar extends StatelessWidget {
+  final List<_AdminModule> modules;
+  final int selectedIndex;
+  final bool expanded;
+  final String userName;
+  final String userRole;
+  final String initials;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onLogout;
+
+  const _AdminSidebar({
+    required this.modules,
+    required this.selectedIndex,
+    required this.expanded,
+    required this.userName,
+    required this.userRole,
+    required this.initials,
+    required this.onSelect,
+    required this.onLogout,
+  });
+
+  static const _width = 240.0;
+  static const _widthCompact = 72.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: AppDesignSystem.durationNormal,
+      curve: AppDesignSystem.curveStandard,
+      width: expanded ? _width : _widthCompact,
+      decoration: const BoxDecoration(
+        color: _kNavy,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 12,
+            offset: Offset(2, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _buildLogo(),
+          const SizedBox(height: 6),
+          Expanded(child: _buildNav()),
+          _buildFooter(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogo() {
+    return Container(
+      height: expanded ? 64 : 56,
+      padding: EdgeInsets.symmetric(horizontal: expanded ? 16 : 0),
+      alignment: expanded ? Alignment.centerLeft : Alignment.center,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFF1C2B3A))),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: _kPrimary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.admin_panel_settings_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          if (expanded) ...[
+            const SizedBox(width: 12),
+            const Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Panel Admin',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    'Sistema de Asistencia',
+                    style: TextStyle(color: _kNavyText, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNav() {
+    final items = <Widget>[];
+    String? lastSection;
+
+    for (var i = 0; i < modules.length; i++) {
+      final m = modules[i];
+      if (m.section != lastSection) {
+        items.add(_buildSectionHeader(m.section));
+        lastSection = m.section;
+      }
+      items.add(_buildNavItem(context: items, module: m, index: i));
+    }
+
+    return ListView(
+      padding: EdgeInsets.symmetric(
+        horizontal: expanded ? 10 : 8,
+        vertical: 8,
+      ),
+      children: items,
+    );
+  }
+
+  Widget _buildSectionHeader(String section) {
+    if (!expanded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Divider(color: Color(0xFF1C2B3A), height: 1),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+      child: Text(
+        section,
+        style: const TextStyle(
+          color: _kNavySection,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.9,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required Object context,
+    required _AdminModule module,
+    required int index,
+  }) {
+    final isSelected = selectedIndex == index;
+
+    final content = expanded
+        ? _expandedItemContent(module, isSelected)
+        : _compactItemContent(module, isSelected);
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: expanded ? 2 : 3),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        child: InkWell(
+          borderRadius: AppDesignSystem.borderRadiusMD,
+          hoverColor: Colors.white.withValues(alpha: 0.05),
+          onTap: () => onSelect(index),
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  Widget _expandedItemContent(_AdminModule module, bool isSelected) {
+    return Stack(
+      children: [
+        if (isSelected)
+          Positioned(
+            left: 0,
+            top: 8,
+            bottom: 8,
+            child: Container(
+              width: 3,
+              decoration: BoxDecoration(
+                color: _kPrimaryLight,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        AnimatedContainer(
+          duration: AppDesignSystem.durationFast,
+          margin: const EdgeInsets.only(left: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? _kPrimary.withValues(alpha: 0.16)
+                : Colors.transparent,
+            borderRadius: AppDesignSystem.borderRadiusMD,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isSelected ? module.iconSelected : module.icon,
+                size: 20,
+                color: isSelected ? Colors.white : _kNavyText,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  module.label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : _kNavyText,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+              if (module.isPlaceholder) _buildSoonBadge(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _compactItemContent(_AdminModule module, bool isSelected) {
+    return Tooltip(
+      message: module.label,
+      child: SizedBox(
+        height: 46,
+        child: Stack(
+          children: [
+            if (isSelected)
+              Positioned(
+                left: 0,
+                top: 9,
+                bottom: 9,
+                child: Container(
+                  width: 3,
+                  decoration: BoxDecoration(
+                    color: _kPrimaryLight,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            Center(
+              child: AnimatedContainer(
+                duration: AppDesignSystem.durationFast,
+                width: 44,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? _kPrimary.withValues(alpha: 0.16)
+                      : Colors.transparent,
+                  borderRadius: AppDesignSystem.borderRadiusMD,
+                ),
+                child: Icon(
+                  isSelected ? module.iconSelected : module.icon,
+                  size: 22,
+                  color: isSelected ? Colors.white : _kNavyText,
+                ),
+              ),
+            ),
+            if (module.isPlaceholder)
+              Positioned(
+                right: 8,
+                top: 6,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: _kPrimaryLight,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _kNavy, width: 1.5),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSoonBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: AppDesignSystem.borderRadiusFull,
+      ),
+      child: Text(
+        'Pronto',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.65),
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFF1C2B3A))),
+      ),
+      child: expanded ? _expandedFooter() : _compactFooter(),
+    );
+  }
+
+  Widget _expandedFooter() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: _kPrimary,
+              child: Text(
+                initials.isEmpty ? 'A' : initials,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    userRole,
+                    style: const TextStyle(color: _kNavyText, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Material(
+          color: Colors.transparent,
+          borderRadius: AppDesignSystem.borderRadiusMD,
+          child: InkWell(
+            borderRadius: AppDesignSystem.borderRadiusMD,
+            hoverColor: Colors.white.withValues(alpha: 0.05),
+            onTap: onLogout,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: AppDesignSystem.borderRadiusMD,
+                border: Border.all(
+                  color: const Color(0xFFEF5350).withValues(alpha: 0.3),
+                ),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.logout_rounded, size: 18, color: Color(0xFFEF5350)),
+                  SizedBox(width: 10),
+                  Text(
+                    'Cerrar sesión',
+                    style: TextStyle(
+                      color: Color(0xFFEF5350),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _compactFooter() {
+    return Column(
+      children: [
+        Tooltip(
+          message: userName,
+          child: CircleAvatar(
+            radius: 17,
+            backgroundColor: _kPrimary,
+            child: Text(
+              initials.isEmpty ? 'A' : initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        IconButton(
+          icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF5350)),
+          iconSize: 20,
+          tooltip: 'Cerrar sesión',
+          onPressed: onLogout,
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AdminModule {
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final IconData iconSelected;
+  final String section;
+  final bool isPlaceholder;
+
+  const _AdminModule({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.iconSelected,
+    required this.section,
+    this.isPlaceholder = false,
+  });
+}

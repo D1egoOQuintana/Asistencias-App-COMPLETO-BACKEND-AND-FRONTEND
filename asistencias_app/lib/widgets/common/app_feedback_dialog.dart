@@ -34,7 +34,7 @@ class AppFeedbackDialog {
       message: message,
       buttonText: buttonText,
       panaraDialogType: PanaraDialogType.error,
-      onTapDismiss: () {
+      onTapDismiss: () {  
         Navigator.of(context, rootNavigator: true).pop();
       },
     );

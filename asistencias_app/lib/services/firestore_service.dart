@@ -14,6 +14,16 @@ class FirestoreService {
   static const String _studentsCollection = 'students';
   static const String _attendanceCollection = 'attendance';
 
+  static CollectionReference<Map<String, dynamic>> _classroomAttendance(
+    String classroomId,
+  ) => _firestore
+      .collection(_classroomsCollection)
+      .doc(classroomId)
+      .collection(_attendanceCollection);
+
+  static Query<Map<String, dynamic>> _attendanceGroup() =>
+      _firestore.collectionGroup(_attendanceCollection);
+
   // ============================================================================
   // GESTIÓN DE USUARIOS/DOCENTES
   // ============================================================================
@@ -249,8 +259,11 @@ class FirestoreService {
   /// Registrar asistencia
   static Future<void> recordAttendance(AttendanceModel attendance) async {
     try {
-      await _firestore
-          .collection(_attendanceCollection)
+      if (attendance.classroomId.isEmpty) {
+        throw Exception('classroomId requerido para registrar asistencia');
+      }
+
+      await _classroomAttendance(attendance.classroomId)
           .add(attendance.toMap());
     } catch (e) {
       throw Exception('Error al registrar asistencia: $e');
@@ -267,8 +280,9 @@ class FirestoreService {
       final endOfDay = startOfDay.add(const Duration(days: 1));
 
       final querySnapshot = await _firestore
+          .collection(_classroomsCollection)
+          .doc(classroomId)
           .collection(_attendanceCollection)
-          .where('classroomId', isEqualTo: classroomId)
           .where('timestamp', isGreaterThanOrEqualTo: startOfDay)
           .where('timestamp', isLessThan: endOfDay)
           .orderBy('timestamp')
@@ -289,9 +303,7 @@ class FirestoreService {
     DateTime? endDate,
   }) async {
     try {
-      Query query = _firestore
-          .collection(_attendanceCollection)
-          .where('studentId', isEqualTo: studentId);
+        Query query = _attendanceGroup().where('studentId', isEqualTo: studentId);
 
       if (startDate != null) {
         query = query.where('timestamp', isGreaterThanOrEqualTo: startDate);
@@ -324,9 +336,10 @@ class FirestoreService {
       final endOfDay = startOfDay.add(const Duration(days: 1));
 
       final querySnapshot = await _firestore
+          .collection(_classroomsCollection)
+          .doc(classroomId)
           .collection(_attendanceCollection)
           .where('studentId', isEqualTo: studentId)
-          .where('classroomId', isEqualTo: classroomId)
           .where('timestamp', isGreaterThanOrEqualTo: startOfDay)
           .where('timestamp', isLessThan: endOfDay)
           .limit(1)
@@ -372,7 +385,7 @@ class FirestoreService {
       final endOfDay = startOfDay.add(const Duration(days: 1));
 
       final todayAttendanceCount = await _firestore
-          .collection(_attendanceCollection)
+          .collectionGroup(_attendanceCollection)
           .where('timestamp', isGreaterThanOrEqualTo: startOfDay)
           .where('timestamp', isLessThan: endOfDay)
           .count()
