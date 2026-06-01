@@ -20,7 +20,9 @@ try {
   exports.syncClassroomAttendanceToRoot = tsModules.syncClassroomAttendanceToRoot;
   exports.handleTelegramWebhook = tsModules.handleTelegramWebhook;
   exports.createTelegramActivationLink = tsModules.createTelegramActivationLink;
-  
+  exports.notifyClassroomAbsences = tsModules.notifyClassroomAbsences;
+  exports.notifyAbsencesScheduled = tsModules.notifyAbsencesScheduled;
+
   console.log('✅ Funciones de Telegram cargadas desde telegram.ts');
 } catch (error) {
   console.error('Error cargando módulos TypeScript:', error);

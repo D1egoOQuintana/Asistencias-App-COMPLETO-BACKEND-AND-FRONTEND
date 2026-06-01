@@ -4,6 +4,7 @@ import '../../../../models/classroom_model.dart';
 import '../../../../services/classroom_service.dart';
 import '../../../../services/teacher_service.dart';
 import '../../../../theme/app_design_system.dart';
+import '../../widgets/admin_ui.dart';
 
 const _kBorder = Color(0xFFE6EAF0);
 const _kCanvas = Color(0xFFF4F6FA);
@@ -45,18 +46,17 @@ class _AssignTeacherDialogState extends State<AssignTeacherDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ok
+        AdminFeedback.snack(
+          ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+          ok
               ? 'Docente asignado correctamente'
-              : 'No se pudo asignar el docente'),
-          backgroundColor:
-              ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+              : 'No se pudo asignar el docente',
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppDesignSystem.errorColor),
+        AdminFeedback.snack(AdminFeedbackType.error, 'Error: $e'),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -79,9 +79,9 @@ class _AssignTeacherDialogState extends State<AssignTeacherDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: AppDesignSystem.borderRadiusLG),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,34 +247,18 @@ class _AssignTeacherDialogState extends State<AssignTeacherDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                        foregroundColor: AppDesignSystem.textSecondary,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12)),
-                    child: const Text('Cancelar'),
+                  AdminButton.ghost(
+                    label: 'Cancelar',
+                    onPressed:
+                        _isLoading ? null : () => Navigator.of(context).pop(),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
+                  const SizedBox(width: 8),
+                  AdminButton.primary(
+                    label: 'Asignar',
+                    icon: Icons.check_rounded,
+                    loading: _isLoading,
                     onPressed:
                         (_isLoading || _selectedUid == null) ? null : _assign,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppDesignSystem.primaryColor,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: AppDesignSystem.borderRadiusMD),
-                    ),
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Asignar'),
                   ),
                 ],
               ),

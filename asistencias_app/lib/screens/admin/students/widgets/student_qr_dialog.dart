@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -97,6 +98,24 @@ class _StudentQrDialogState extends State<StudentQrDialog> {
     }
   }
 
+  /// Contenido REAL que se codifica en la imagen QR.
+  ///
+  /// Debe ser el MISMO formato JSON que genera la app docente
+  /// (`teacher_students_screen.dart`), porque el escáner
+  /// (`qr_attendance_realtime.dart`) resuelve el perfil del estudiante por el
+  /// campo `id` = doc ID de Firestore. Si se codificara solo `s.qrCode`
+  /// (string plano `STU-...`), el escáner no encontraría al estudiante y la
+  /// asistencia quedaría como "Estudiante" genérico sin enviar Telegram.
+  String _qrPayload(StudentModel s) {
+    return jsonEncode({
+      'type': 'student',
+      'id': s.id,
+      'name': s.fullName,
+      'dni': s.dni,
+      'classroomId': s.classroomId,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.student;
@@ -179,7 +198,10 @@ class _StudentQrDialogState extends State<StudentQrDialog> {
                           border: Border.all(color: _kBorder),
                         ),
                         child: QrImageView(
-                          data: s.qrCode,
+                          // Codifica el JSON (mismo formato que la app docente),
+                          // NO el string plano s.qrCode. Así el escáner resuelve
+                          // el estudiante real y envía Telegram.
+                          data: _qrPayload(s),
                           version: QrVersions.auto,
                           size: 180,
                           eyeStyle: const QrEyeStyle(

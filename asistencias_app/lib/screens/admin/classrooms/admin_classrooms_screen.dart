@@ -11,6 +11,21 @@ import '../widgets/admin_ui.dart';
 const _kBorder = Color(0xFFE6EAF0);
 const _kCanvas = Color(0xFFF4F6FA);
 
+// Columnas de la tabla de Aulas (header y filas comparten esta spec).
+// Texto → izquierda; ESTADO (chip) → centrado; acciones → derecha.
+const List<AdminColumn> _classroomColumns = [
+  AdminColumn.flex(5, header: 'AULA'), // avatar + nombre
+  AdminColumn.flex(2, header: 'GRADO / SEC'), // texto
+  AdminColumn.flex(4, header: 'DOCENTE'), // ícono + nombre
+  AdminColumn.flex(3, header: 'HORARIO'), // texto
+  AdminColumn.fixed(124, header: 'ESTADO'), // chip centrado
+  AdminColumn.fixed(AdminTable.actionColWidth,
+      align: Alignment.centerRight), // acciones
+];
+
+// Padding horizontal de la tabla de Aulas (header y filas deben coincidir).
+const EdgeInsets _classroomRowPadding = EdgeInsets.symmetric(horizontal: 20);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,6 +45,7 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
   final TextEditingController _search = TextEditingController();
   String _filterOp = 'all'; // all | ready | no_teacher | no_schedule
   String _query = '';
+  int _page = 0; // paginación cliente, 10 por página
 
   // Fetch active classrooms (getAllClassrooms filters isActive==true).
   // Inactive classrooms view → TODO Fase 5: add isActive filter toggle.
@@ -38,7 +54,10 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() => _query = _search.text));
+    _search.addListener(() => setState(() {
+          _query = _search.text;
+          _page = 0; // reiniciar paginación al buscar
+        }));
   }
 
   @override
@@ -130,19 +149,19 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
           '${c.isActive ? 'la ocultará de los docentes y del sistema.' : 'la volverá a activar.'}',
         ),
         actions: [
-          TextButton(
+          AdminButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: c.isActive
-                  ? AppDesignSystem.errorColor
-                  : AppDesignSystem.successColor,
-            ),
-            child: Text(action[0].toUpperCase() + action.substring(1)),
-          ),
+          c.isActive
+              ? AdminButton.danger(
+                  label: action[0].toUpperCase() + action.substring(1),
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                )
+              : AdminButton.primary(
+                  label: action[0].toUpperCase() + action.substring(1),
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                ),
         ],
       ),
     );
@@ -151,12 +170,11 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
         ? await ClassroomService.deactivateClassroom(c.id!)
         : await ClassroomService.reactivateClassroom(c.id!);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(ok
+    ScaffoldMessenger.of(context).showSnackBar(AdminFeedback.snack(
+      ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+      ok
           ? 'Aula ${c.isActive ? 'desactivada' : 'activada'} correctamente'
-          : 'No se pudo cambiar el estado'),
-      backgroundColor:
-          ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+          : 'No se pudo cambiar el estado',
     ));
   }
 
@@ -170,26 +188,30 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
     final isWeb = width >= AppDesignSystem.breakpointMobile;
     final pad = AdminUi.pagePadding(width);
 
-    return Scaffold(
-      backgroundColor: _kCanvas,
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(pad, pad, pad, 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildPageHeader(isDesktop),
-                  const SizedBox(height: 16),
-                  _buildFilterBar(),
-                  const SizedBox(height: 16),
-                  _buildTable(isWeb),
-                ],
+    // Inter SOLO en el subárbol de Aulas (no afecta login ni docente).
+    return DefaultTextStyle.merge(
+      style: AdminUi.fontBase,
+      child: Scaffold(
+        backgroundColor: AdminUi.surface0,
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(pad, pad, pad, 40),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPageHeader(isDesktop),
+                    const SizedBox(height: 16),
+                    _buildFilterBar(),
+                    const SizedBox(height: 16),
+                    _buildTable(isWeb),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -224,19 +246,10 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
           ),
         ),
         const SizedBox(width: 16),
-        FilledButton.icon(
+        AdminButton.primary(
+          label: 'Nueva aula',
+          icon: Icons.add_rounded,
           onPressed: _showCreateDialog,
-          style: FilledButton.styleFrom(
-            backgroundColor: AppDesignSystem.primaryColor,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            shape: RoundedRectangleBorder(
-                borderRadius: AppDesignSystem.borderRadiusMD),
-          ),
-          icon: const Icon(Icons.add_rounded, size: 20),
-          label: const Text(
-            'Nueva aula',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          ),
         ),
       ],
     );
@@ -252,42 +265,15 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Search
-          TextField(
+          AdminSearchField(
             controller: _search,
-            decoration: InputDecoration(
-              hintText: 'Buscar por nombre, grado, sección o docente…',
-              hintStyle: const TextStyle(
-                  fontSize: 13, color: AppDesignSystem.textSecondary),
-              prefixIcon: const Icon(Icons.search_rounded,
-                  size: 20, color: AppDesignSystem.textSecondary),
-              suffixIcon: _query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded,
-                          size: 18, color: AppDesignSystem.textSecondary),
-                      onPressed: () {
-                        _search.clear();
-                        setState(() => _query = '');
-                      },
-                    )
-                  : null,
-              filled: true,
-              fillColor: _kCanvas,
-              border: OutlineInputBorder(
-                borderRadius: AppDesignSystem.borderRadiusFull,
-                borderSide: const BorderSide(color: _kBorder),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: AppDesignSystem.borderRadiusFull,
-                borderSide: const BorderSide(color: _kBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: AppDesignSystem.borderRadiusFull,
-                borderSide: const BorderSide(
-                    color: AppDesignSystem.primaryColor, width: 2),
-              ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
+            hint: 'Buscar por nombre, grado, sección o docente…',
+            hasValue: _query.isNotEmpty,
+            onChanged: (_) {},
+            onClear: () {
+              _search.clear();
+              setState(() => _query = '');
+            },
           ),
           const SizedBox(height: 12),
 
@@ -328,7 +314,10 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
         label: label,
         selected: selected,
         icon: icon,
-        onTap: () => setState(() => _filterOp = key),
+        onTap: () => setState(() {
+          _filterOp = key;
+          _page = 0;
+        }),
       );
     }).toList();
   }
@@ -350,6 +339,16 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
             .map((d) => ClassroomModel.fromFirestore(d))
             .toList();
         final models = _filtered(allModels);
+
+        // Paginación cliente: 10 por página (esta tabla pinta filas no-lazy).
+        const perPage = AdminPaginationBar.perPage;
+        final total = models.length;
+        final pageCount = total == 0 ? 1 : (total / perPage).ceil();
+        final page = _page.clamp(0, pageCount - 1);
+        final pageModels = total == 0
+            ? const <ClassroomModel>[]
+            : models.sublist(
+                page * perPage, (page * perPage + perPage).clamp(0, total));
 
         return Container(
           decoration: AdminUi.cardDecoration(elevated: false),
@@ -408,7 +407,7 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
                 _emptyState()
               else if (showTable)
                 _ClassroomsWebTable(
-                  classrooms: models,
+                  classrooms: pageModels,
                   opStatus: _opStatus,
                   onEdit: _showEditDialog,
                   onAssignTeacher: _showAssignTeacher,
@@ -417,12 +416,23 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
                 )
               else
                 _ClassroomsMobileList(
-                  classrooms: models,
+                  classrooms: pageModels,
                   opStatus: _opStatus,
                   onEdit: _showEditDialog,
                   onAssignTeacher: _showAssignTeacher,
                   onSchedule: _showSchedule,
                   onToggle: _confirmToggle,
+                ),
+              if (models.isNotEmpty && total > perPage)
+                AdminPaginationBar(
+                  page: page,
+                  pageCount: pageCount,
+                  totalItems: total,
+                  onPrev:
+                      page > 0 ? () => setState(() => _page = page - 1) : null,
+                  onNext: page < pageCount - 1
+                      ? () => setState(() => _page = page + 1)
+                      : null,
                 ),
             ],
           ),
@@ -569,22 +579,11 @@ class _ClassroomsWebTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Header row
-        Container(
-          color: _kCanvas,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: const Row(
-            children: [
-              SizedBox(width: 36),
-              SizedBox(width: 12),
-              Expanded(flex: 4, child: _ColHeader('AULA')),
-              Expanded(flex: 2, child: _ColHeader('GRADO / SEC')),
-              Expanded(flex: 4, child: _ColHeader('DOCENTE')),
-              Expanded(flex: 3, child: _ColHeader('HORARIO')),
-              Expanded(flex: 3, child: _ColHeader('ESTADO OPERATIVO')),
-              SizedBox(width: 120), // actions
-            ],
-          ),
+        // Header row (misma spec de columnas que las filas)
+        AdminTable.headerRow(
+          _classroomColumns,
+          decorated: false,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
         ),
         // Data rows
         ...classrooms.asMap().entries.map((e) {
@@ -599,18 +598,6 @@ class _ClassroomsWebTable extends StatelessWidget {
           );
         }),
       ],
-    );
-  }
-}
-
-class _ColHeader extends StatelessWidget {
-  final String text;
-  const _ColHeader(this.text);
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AdminUi.tableHeaderTextStyle,
     );
   }
 }
@@ -671,155 +658,110 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
               hovered: _hovered,
               isLast: widget.isLast,
             ),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+            padding: _classroomRowPadding,
             child: SizedBox(
-              height: 60,
-              child: Row(
-                children: [
-                  // Initial
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppDesignSystem.primaryColor.withValues(alpha: 0.08),
-                      borderRadius: AppDesignSystem.borderRadiusSM,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                        color: AppDesignSystem.primaryColor,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
+              height: AdminTable.rowHeight,
+              child: AdminTable.dataRow(_classroomColumns, [
+                // AULA — inicial + nombre como celda compuesta.
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color:
+                            AppDesignSystem.primaryColor.withValues(alpha: 0.08),
+                        borderRadius: AppDesignSystem.borderRadiusSM,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Name
-                  Expanded(
-                    flex: 4,
-                    child: Text(
-                      c.name,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppDesignSystem.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-
-                  // Grade / section
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      c.grade.isNotEmpty ? '${c.grade}° ${c.section}' : '—',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppDesignSystem.textSecondary,
-                      ),
-                    ),
-                  ),
-
-                  // Teacher
-                  Expanded(
-                    flex: 4,
-                    child: Row(
-                      children: [
-                        if (!c.hasTeacher)
-                          const Icon(Icons.person_off_outlined,
-                              size: 14,
-                              color: AppDesignSystem.warningColor)
-                        else
-                          const Icon(Icons.person_rounded,
-                              size: 14,
-                              color: AppDesignSystem.textSecondary),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            c.teacherName?.isNotEmpty == true
-                                ? c.teacherName!
-                                : 'Sin asignar',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: c.hasTeacher
-                                  ? AppDesignSystem.textPrimary
-                                  : AppDesignSystem.warningColor,
-                              fontWeight: c.hasTeacher
-                                  ? FontWeight.w500
-                                  : FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Schedule
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      _scheduleLabel(),
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: c.hasSchedule
-                            ? AppDesignSystem.textSecondary
-                            : AppDesignSystem.infoColor,
-                        fontWeight: c.hasSchedule
-                            ? FontWeight.w500
-                            : FontWeight.w600,
-                      ),
-                    ),
-                  ),
-
-                  // Operational status chip
-                  Expanded(
-                    flex: 3,
-                    child: _OpStatusChip(status: widget.status),
-                  ),
-
-                  // Actions
-                  SizedBox(
-                    width: 120,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        _ActionIcon(
-                          icon: Icons.edit_outlined,
-                          tooltip: 'Editar',
+                      alignment: Alignment.center,
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
                           color: AppDesignSystem.primaryColor,
-                          onTap: () => widget.onEdit(c),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
                         ),
-                        _ActionIcon(
-                          icon: Icons.person_add_alt_1_rounded,
-                          tooltip: 'Asignar docente',
-                          color: const Color(0xFF1565C0),
-                          onTap: () => widget.onAssignTeacher(c),
-                        ),
-                        _ActionIcon(
-                          icon: Icons.schedule_rounded,
-                          tooltip: 'Configurar horario',
-                          color: AppDesignSystem.successColor,
-                          onTap: () => widget.onSchedule(c),
-                        ),
-                        _ActionIcon(
-                          icon: Icons.power_settings_new_rounded,
-                          tooltip: c.isActive ? 'Desactivar' : 'Activar',
-                          color: c.isActive
-                              ? AppDesignSystem.errorColor
-                              : AppDesignSystem.successColor,
-                          onTap: () => widget.onToggle(c),
-                        ),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        c.name,
+                        style: AdminType.bodyStrong,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                // GRADO / SEC (texto)
+                Text(
+                  c.grade.isNotEmpty ? '${c.grade}° ${c.section}' : '—',
+                  style: AdminType.bodySm
+                      .copyWith(color: AppDesignSystem.textSecondary),
+                ),
+                // DOCENTE (ícono + nombre)
+                Row(
+                  children: [
+                    Icon(
+                      c.hasTeacher
+                          ? Icons.person_rounded
+                          : Icons.person_off_outlined,
+                      size: 14,
+                      color: c.hasTeacher
+                          ? AppDesignSystem.textSecondary
+                          : AppDesignSystem.warningColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        c.teacherName?.isNotEmpty == true
+                            ? c.teacherName!
+                            : 'Sin asignar',
+                        style: AdminType.bodySm.copyWith(
+                          color: c.hasTeacher
+                              ? AppDesignSystem.textPrimary
+                              : AppDesignSystem.warningColor,
+                          fontWeight:
+                              c.hasTeacher ? FontWeight.w500 : FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                // HORARIO (texto)
+                Text(
+                  _scheduleLabel(),
+                  style: AdminType.bodySm.copyWith(
+                    color: c.hasSchedule
+                        ? AppDesignSystem.textSecondary
+                        : AppDesignSystem.infoColor,
+                    fontWeight:
+                        c.hasSchedule ? FontWeight.w500 : FontWeight.w600,
                   ),
-                ],
-              ),
+                ),
+                // ESTADO (chip centrado por la spec)
+                _OpStatusChip(status: widget.status),
+                // ACCIONES (Editar visible + menú "⋯", derecha)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AdminActionIcon(
+                      icon: Icons.edit_outlined,
+                      tooltip: 'Editar',
+                      onTap: () => widget.onEdit(c),
+                    ),
+                    _RowMenu(
+                      isActive: c.isActive,
+                      onAssignTeacher: () => widget.onAssignTeacher(c),
+                      onSchedule: () => widget.onSchedule(c),
+                      onToggle: () => widget.onToggle(c),
+                    ),
+                  ],
+                ),
+              ]),
             ),
           ),
         ),
@@ -1010,34 +952,96 @@ class _OpStatusChip extends StatelessWidget {
   }
 }
 
-class _ActionIcon extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color color;
-  final VoidCallback onTap;
+/// Menú "⋯" que agrupa acciones secundarias del aula para reducir ruido en la
+/// fila. Conserva acciones reales: asignar docente, configurar horario y
+/// activar/desactivar.
+class _RowMenu extends StatelessWidget {
+  final bool isActive;
+  final VoidCallback onAssignTeacher;
+  final VoidCallback onSchedule;
+  final VoidCallback onToggle;
 
-  const _ActionIcon({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onTap,
+  const _RowMenu({
+    required this.isActive,
+    required this.onAssignTeacher,
+    required this.onSchedule,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fg = color == AppDesignSystem.errorColor
-        ? AppDesignSystem.errorColor
-        : AdminUi.neutralAction;
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        borderRadius: AppDesignSystem.borderRadiusSM,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 17, color: fg),
-        ),
+    return PopupMenuButton<String>(
+      tooltip: 'Más acciones',
+      icon: const Icon(Icons.more_horiz_rounded,
+          size: 18, color: AdminUi.neutralAction),
+      padding: EdgeInsets.zero,
+      splashRadius: 18,
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        side: const BorderSide(color: AdminUi.border),
       ),
+      onSelected: (v) {
+        switch (v) {
+          case 'assign':
+            onAssignTeacher();
+          case 'schedule':
+            onSchedule();
+          case 'toggle':
+            onToggle();
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          value: 'assign',
+          child: Row(
+            children: [
+              const Icon(Icons.person_add_alt_1_rounded,
+                  size: 18, color: AdminUi.neutralAction),
+              const SizedBox(width: 10),
+              Text('Asignar docente', style: AdminType.bodySm),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'schedule',
+          child: Row(
+            children: [
+              const Icon(Icons.schedule_rounded,
+                  size: 18, color: AdminUi.neutralAction),
+              const SizedBox(width: 10),
+              Text('Configurar horario', style: AdminType.bodySm),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'toggle',
+          child: Row(
+            children: [
+              Icon(
+                isActive
+                    ? Icons.block_rounded
+                    : Icons.check_circle_outline_rounded,
+                size: 18,
+                color: isActive
+                    ? AppDesignSystem.errorColor
+                    : AppDesignSystem.successColor,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                isActive ? 'Desactivar aula' : 'Activar aula',
+                style: AdminType.bodySm.copyWith(
+                  color: isActive
+                      ? AppDesignSystem.errorColor
+                      : AppDesignSystem.successColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

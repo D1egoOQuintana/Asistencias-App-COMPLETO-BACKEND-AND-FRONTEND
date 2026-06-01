@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/student_model.dart';
@@ -10,20 +11,31 @@ import 'widgets/student_transfer_dialog.dart';
 import '../widgets/admin_ui.dart';
 
 // ─── Palette (same tokens as AdminShell) ────────────────────────────────────
-const _kCanvas = Color(0xFFF4F6FA);
 const _kBorder = Color(0xFFE6EAF0);
 const _kPrimary = Color(0xFF1976D2);
 
+// Columnas de la tabla de Estudiantes (header y filas comparten esta spec).
+// Texto → izquierda; chips (QR, ESTADO) → centrados; acciones → derecha.
+const List<AdminColumn> _studentColumns = [
+  AdminColumn.flex(4, header: 'ESTUDIANTE'), // avatar + nombre
+  AdminColumn.fixed(84, align: Alignment.centerLeft, header: 'DNI'),
+  AdminColumn.flex(3, header: 'AULA'), // texto
+  AdminColumn.flex(3, header: 'APODERADO / TEL.'), // texto
+  AdminColumn.fixed(76, header: 'QR'), // chip centrado
+  AdminColumn.fixed(96, header: 'ESTADO'), // chip centrado
+  AdminColumn.fixed(AdminTable.actionColWidth,
+      align: Alignment.centerRight), // acciones
+];
+
 // ─── Filter options ──────────────────────────────────────────────────────────
-enum _StudentFilter {
-  all,
-  active,
-  inactive,
-  noPhone,
+enum _StatusFilter { all, active, inactive }
+
+enum _SecondaryFilter {
   withPhone,
-  noClassroom,
+  noPhone,
   withQr,
   noQr,
+  withClassroom,
 }
 
 /// Panel admin de gestión de estudiantes.
@@ -42,27 +54,122 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   bool get wantKeepAlive => true;
 
   final _searchCtrl = TextEditingController();
-  _StudentFilter _filter = _StudentFilter.all;
+  _StatusFilter _statusFilter = _StatusFilter.all;
+  final Set<_SecondaryFilter> _secondaryFilters = <_SecondaryFilter>{};
   String _query = '';
+  String? _classroomFilter; // id de aula seleccionada; null = todas
+  bool _onlyWithoutClassroom = false; // selector principal "Sin aula"
 
-  // Two parallel streams — initialized once in initState.
-  late final Stream<QuerySnapshot> _studentsStream;
+  // ── Performance: ventana de carga (servidor) + paginación (cliente) ─────────
+  // No se cargan TODOS los alumnos de golpe: se trae una ventana del servidor
+  // y se muestran de a 10 por página. Al pasar de la última página de la
+  // ventana, se amplía la ventana. Reduce memoria, parseo y filas renderizadas.
+  static const int _windowSize = 100; // tamaño de ventana del servidor
+  int _limit = _windowSize;
+  int _page = 0; // página actual (0-based), 10 por página
+  Timer? _searchDebounce;
+
+  // Stream de estudiantes (ventana limitada) + stream de aulas (para etiquetas).
+  late Stream<QuerySnapshot> _studentsStream;
   late final Stream<QuerySnapshot> _classroomsStream;
+
+  void _initStudentsStream() {
+    // Sin filtro isActive: el admin debe ver activos e inactivos.
+    // Filtro por aula server-side (campo existente classroomId) → solo trae
+    // los alumnos de esa aula. limit() acota la ventana de memoria.
+    Query<Map<String, dynamic>> q =
+        FirebaseFirestore.instance.collection('students');
+    if (_classroomFilter != null && !_onlyWithoutClassroom) {
+      q = q.where('classroomId', isEqualTo: _classroomFilter);
+    }
+    _studentsStream = q.limit(_limit).snapshots();
+  }
 
   @override
   void initState() {
     super.initState();
-    // No isActive filter — admin must see active AND inactive students.
-    _studentsStream = FirebaseFirestore.instance
-        .collection('students')
-        .snapshots();
+    _initStudentsStream();
     _classroomsStream = ClassroomService.getAllClassrooms();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// Amplía la ventana del servidor y avanza a la página [nextPage].
+  void _growWindow(int nextPage) {
+    setState(() {
+      _limit += _windowSize;
+      _initStudentsStream();
+      _page = nextPage;
+    });
+  }
+
+  void _onSearchChanged(String v) {
+    // Debounce: no refiltrar ni reconstruir en cada tecla.
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final q = v.trim().toLowerCase();
+      if (q != _query) {
+        setState(() {
+          _query = q;
+          _page = 0; // reiniciar paginación al cambiar la búsqueda
+        });
+      }
+    });
+  }
+
+  String _statusLabel(_StatusFilter f) {
+    switch (f) {
+      case _StatusFilter.active:
+        return 'Activos';
+      case _StatusFilter.inactive:
+        return 'Inactivos';
+      case _StatusFilter.all:
+        return 'Todos';
+    }
+  }
+
+  String _secondaryLabel(_SecondaryFilter f) {
+    switch (f) {
+      case _SecondaryFilter.withPhone:
+        return 'Con telefono';
+      case _SecondaryFilter.noPhone:
+        return 'Sin telefono';
+      case _SecondaryFilter.withQr:
+        return 'Con QR';
+      case _SecondaryFilter.noQr:
+        return 'Sin QR';
+      case _SecondaryFilter.withClassroom:
+        return 'Con aula';
+    }
+  }
+
+  void _toggleSecondary(_SecondaryFilter filter) {
+    setState(() {
+      if (_secondaryFilters.contains(filter)) {
+        _secondaryFilters.remove(filter);
+      } else {
+        if (filter == _SecondaryFilter.withPhone) {
+          _secondaryFilters.remove(_SecondaryFilter.noPhone);
+        }
+        if (filter == _SecondaryFilter.noPhone) {
+          _secondaryFilters.remove(_SecondaryFilter.withPhone);
+        }
+        if (filter == _SecondaryFilter.withQr) {
+          _secondaryFilters.remove(_SecondaryFilter.noQr);
+        }
+        if (filter == _SecondaryFilter.noQr) {
+          _secondaryFilters.remove(_SecondaryFilter.withQr);
+        }
+        _secondaryFilters.add(filter);
+      }
+      _page = 0;
+    });
   }
 
   // ─── helpers ───────────────────────────────────────────────────────────────
@@ -77,23 +184,37 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       final qrCode = ((d['qrCode'] as String?) ?? '').trim();
       final classroomId = ((d['classroomId'] as String?) ?? '').trim();
 
-      switch (_filter) {
-        case _StudentFilter.active:
-          if (!isActive) return false;
-        case _StudentFilter.inactive:
-          if (isActive) return false;
-        case _StudentFilter.noPhone:
-          if (phone.isNotEmpty) return false;
-        case _StudentFilter.withPhone:
-          if (phone.isEmpty) return false;
-        case _StudentFilter.noClassroom:
-          if (classroomId.isNotEmpty) return false;
-        case _StudentFilter.withQr:
-          if (qrCode.isEmpty) return false;
-        case _StudentFilter.noQr:
-          if (qrCode.isNotEmpty) return false;
-        case _StudentFilter.all:
-          break;
+      // Filtro principal: aula.
+      if (_onlyWithoutClassroom) {
+        if (classroomId.isNotEmpty) return false;
+      } else if (_classroomFilter != null && classroomId != _classroomFilter) {
+        return false;
+      }
+
+      // Estado (selector dedicado).
+      if (_statusFilter == _StatusFilter.active && !isActive) return false;
+      if (_statusFilter == _StatusFilter.inactive && isActive) return false;
+
+      // Filtros secundarios ("Más filtros").
+      if (_secondaryFilters.contains(_SecondaryFilter.withPhone) &&
+          phone.isEmpty) {
+        return false;
+      }
+      if (_secondaryFilters.contains(_SecondaryFilter.noPhone) &&
+          phone.isNotEmpty) {
+        return false;
+      }
+      if (_secondaryFilters.contains(_SecondaryFilter.withQr) &&
+          qrCode.isEmpty) {
+        return false;
+      }
+      if (_secondaryFilters.contains(_SecondaryFilter.noQr) &&
+          qrCode.isNotEmpty) {
+        return false;
+      }
+      if (_secondaryFilters.contains(_SecondaryFilter.withClassroom) &&
+          classroomId.isEmpty) {
+        return false;
       }
 
       if (_query.isNotEmpty) {
@@ -127,12 +248,11 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         ? await StudentService.deactivateStudent(student.id!)
         : await StudentService.reactivateStudent(student.id!);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok
+      ScaffoldMessenger.of(context).showSnackBar(AdminFeedback.snack(
+        ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+        ok
             ? 'Estudiante ${wasActive ? 'desactivado' : 'reactivado'}'
-            : 'No se pudo actualizar el estado'),
-        backgroundColor:
-            ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+            : 'No se pudo actualizar el estado',
       ));
     }
   }
@@ -181,22 +301,25 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             ? '¿Desactivar a ${student.fullName}? No aparecerá en los registros activos de asistencia.'
             : '¿Activar a ${student.fullName}? Volverá a ser visible en los registros de asistencia.'),
         actions: [
-          TextButton(
+          AdminButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: student.isActive
-                  ? AppDesignSystem.errorColor
-                  : AppDesignSystem.successColor,
-            ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              _toggleStatus(student);
-            },
-            child: Text(student.isActive ? 'Desactivar' : 'Activar'),
-          ),
+          student.isActive
+              ? AdminButton.danger(
+                  label: 'Desactivar',
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _toggleStatus(student);
+                  },
+                )
+              : AdminButton.primary(
+                  label: 'Activar',
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _toggleStatus(student);
+                  },
+                ),
         ],
       ),
     );
@@ -210,25 +333,29 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     final width = MediaQuery.of(context).size.width;
     final isWide = width >= 600;
 
-    return Container(
-      color: _kCanvas,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              AdminUi.pagePadding(width),
-              AdminUi.pagePadding(width),
-              AdminUi.pagePadding(width),
-              0,
+    // Inter SOLO en el subárbol de Estudiantes (no afecta login ni docente).
+    return DefaultTextStyle.merge(
+      style: AdminUi.fontBase,
+      child: Container(
+        color: AdminUi.surface0,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                AdminUi.pagePadding(width),
+                AdminUi.pagePadding(width),
+                AdminUi.pagePadding(width),
+                0,
+              ),
+              child: const _StudentsHeader(),
             ),
-            child: _StudentsHeader(onAdd: _showCreate),
-          ),
-          const SizedBox(height: 16),
-          _buildToolbar(isWide),
-          const SizedBox(height: 16),
-          Expanded(child: _buildBody(isWide)),
-        ],
+            const SizedBox(height: 16),
+            _buildToolbar(isWide),
+            const SizedBox(height: 16),
+            Expanded(child: _buildBody(isWide)),
+          ],
+        ),
       ),
     );
   }
@@ -236,97 +363,327 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   Widget _buildToolbar(bool wide) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AdminUi.pagePaddingTablet),
-      child: wide
-          ? Row(
-              children: [
-                Expanded(flex: 3, child: _searchBox()),
-                const SizedBox(width: 16),
-                Expanded(flex: 5, child: _filterChips()),
-              ],
-            )
-          : Column(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: AdminUi.cardDecoration(elevated: false),
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final isDesktop = c.maxWidth >= 1050;
+            final isTablet = c.maxWidth >= 720;
+
+            if (isDesktop) {
+              return Row(
+                children: [
+                  SizedBox(width: 240, child: _classroomSelector(false)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _searchBox()),
+                  const SizedBox(width: 10),
+                  SizedBox(width: 150, child: _statusSelector()),
+                  const SizedBox(width: 10),
+                  SizedBox(width: 150, child: _moreFiltersMenu()),
+                  const SizedBox(width: 10),
+                  AdminButton.primary(
+                    label: 'Nuevo estudiante',
+                    icon: Icons.add_rounded,
+                    onPressed: _showCreate,
+                  ),
+                ],
+              );
+            }
+
+            if (isTablet && wide) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _searchBox()),
+                      const SizedBox(width: 10),
+                      SizedBox(width: 220, child: _classroomSelector(false)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      SizedBox(width: 150, child: _statusSelector()),
+                      const SizedBox(width: 10),
+                      SizedBox(width: 150, child: _moreFiltersMenu()),
+                      const SizedBox(width: 10),
+                      AdminButton.primary(
+                        label: 'Nuevo estudiante',
+                        icon: Icons.add_rounded,
+                        onPressed: _showCreate,
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }
+
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _classroomSelector(true),
+                const SizedBox(height: 10),
                 _searchBox(),
                 const SizedBox(height: 10),
-                _filterChips(),
+                Row(
+                  children: [
+                    Expanded(child: _statusSelector()),
+                    const SizedBox(width: 8),
+                    Expanded(child: _moreFiltersMenu()),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: AdminButton.primary(
+                    label: 'Nuevo estudiante',
+                    icon: Icons.add_rounded,
+                    onPressed: _showCreate,
+                    expand: true,
+                  ),
+                ),
               ],
-            ),
-    );
-  }
-
-  Widget _searchBox() {
-    return SizedBox(
-      height: 44,
-      child: TextField(
-        controller: _searchCtrl,
-        onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
-        decoration: InputDecoration(
-          hintText: 'Buscar por nombre, apellido o DNI…',
-          hintStyle: const TextStyle(
-              fontSize: 13, color: AppDesignSystem.textSecondary),
-          prefixIcon: const Icon(Icons.search_rounded,
-              size: 18, color: AppDesignSystem.textSecondary),
-          suffixIcon: _query.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 16),
-                  onPressed: () {
-                    _searchCtrl.clear();
-                    setState(() => _query = '');
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(vertical: 0),
-          border: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide: const BorderSide(color: _kBorder),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide: const BorderSide(color: _kBorder),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide: const BorderSide(color: _kPrimary, width: 1.5),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _filterChips() {
-    const specs = <(_StudentFilter, String, Color?)>[
-      (_StudentFilter.all, 'Todos', null),
-      (_StudentFilter.active, 'Activos', null),
-      (_StudentFilter.inactive, 'Inactivos', null),
-      (_StudentFilter.noPhone, 'Sin teléfono', null),
-      (_StudentFilter.withPhone, 'Con teléfono', null),
-      (_StudentFilter.noClassroom, 'Sin aula', AppDesignSystem.warningColor),
-      (_StudentFilter.withQr, 'Con QR', null),
-      (_StudentFilter.noQr, 'Sin QR', AppDesignSystem.warningColor),
-    ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: specs.map((spec) {
-          final f = spec.$1;
-          final label = spec.$2;
-          final accent = spec.$3;
-          final sel = f == _filter;
-          return AdminFilterChip(
-            label: label,
-            selected: sel,
-            accent: accent,
-            onTap: () => setState(() => _filter = f),
-          );
-        }).toList(),
-      ),
+  /// Selector de aula (server-side por classroomId). null = todas las aulas.
+  Widget _classroomSelector(bool fullWidth) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _classroomsStream,
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        final options = <({String id, String label})>[];
+        for (final d in docs) {
+          final m = d.data() as Map<String, dynamic>;
+          final grade = (m['grade'] ?? '').toString();
+          final section = (m['section'] ?? '').toString();
+          final name = (m['name'] ?? '').toString();
+          final label = grade.isNotEmpty && section.isNotEmpty
+              ? '$grade° $section${name.isNotEmpty ? ' – $name' : ''}'
+              : name.isNotEmpty
+                  ? name
+                  : d.id;
+          options.add((id: d.id, label: label));
+        }
+        options.sort((a, b) => a.label.compareTo(b.label));
+
+        var current = 'Todas las aulas';
+        if (_onlyWithoutClassroom) {
+          current = 'Sin aula';
+        } else if (_classroomFilter != null) {
+          current = options
+              .firstWhere((o) => o.id == _classroomFilter,
+                  orElse: () => (id: _classroomFilter!, label: 'Aula'))
+              .label;
+        }
+
+        final selectedValue = _onlyWithoutClassroom
+            ? _AulaDropdown.withoutAula
+            : (_classroomFilter ?? _AulaDropdown.allAulas);
+
+        return _AulaDropdown(
+          currentLabel: current,
+          selectedValue: selectedValue,
+          options: options,
+          fullWidth: fullWidth,
+          onSelected: (value) => setState(() {
+            if (value == _AulaDropdown.allAulas) {
+              _classroomFilter = null;
+              _onlyWithoutClassroom = false;
+            } else if (value == _AulaDropdown.withoutAula) {
+              _classroomFilter = null;
+              _onlyWithoutClassroom = true;
+              _secondaryFilters.remove(_SecondaryFilter.withClassroom);
+            } else {
+              _classroomFilter = value;
+              _onlyWithoutClassroom = false;
+            }
+            _page = 0;
+            _initStudentsStream();
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _searchBox() {
+    return AdminSearchField(
+      controller: _searchCtrl,
+      hint: 'Buscar por nombre, apellido o DNI…',
+      hasValue: _query.isNotEmpty,
+      onChanged: _onSearchChanged,
+      onClear: () {
+        _searchDebounce?.cancel();
+        _searchCtrl.clear();
+        setState(() {
+          _query = '';
+          _page = 0;
+        });
+      },
+    );
+  }
+
+  Widget _statusSelector() {
+    return _ToolbarDropdown<_StatusFilter>(
+      icon: Icons.flag_outlined,
+      label: 'Estado: ${_statusLabel(_statusFilter)}',
+      tooltip: 'Filtrar por estado',
+      highlighted: _statusFilter != _StatusFilter.all,
+      selected: _statusFilter,
+      options: const {
+        _StatusFilter.all: 'Todos',
+        _StatusFilter.active: 'Activos',
+        _StatusFilter.inactive: 'Inactivos',
+      },
+      onSelected: (status) => setState(() {
+        _statusFilter = status;
+        _page = 0;
+      }),
+    );
+  }
+
+  Widget _moreFiltersMenu() {
+    final activeCount = _secondaryFilters.length;
+    return _ToolbarDropdown<_SecondaryFilter>(
+      icon: Icons.tune_rounded,
+      label: activeCount == 0 ? 'Más filtros' : 'Más filtros ($activeCount)',
+      tooltip: 'Filtros secundarios',
+      highlighted: activeCount > 0,
+      selectedValues: _secondaryFilters,
+      options: const {
+        _SecondaryFilter.withPhone: 'Con teléfono',
+        _SecondaryFilter.noPhone: 'Sin teléfono',
+        _SecondaryFilter.withQr: 'Con QR',
+        _SecondaryFilter.noQr: 'Sin QR',
+        _SecondaryFilter.withClassroom: 'Con aula',
+      },
+      multi: true,
+      onSelectedMulti: _toggleSecondary,
     );
   }
 
   // ─── body ──────────────────────────────────────────────────────────────────
+
+  Widget _buildContextSummary({
+    required int visibleCount,
+    required Map<String, String> classroomMap,
+    required Map<String, Map<String, dynamic>> classroomData,
+  }) {
+    String title;
+    String subtitle;
+    final tags = <Widget>[];
+
+    if (_onlyWithoutClassroom) {
+      title = 'Estudiantes sin aula asignada';
+      subtitle = '$visibleCount visibles en esta vista';
+      tags.add(const _SummaryTag(
+        icon: Icons.info_outline_rounded,
+        label: 'Asignar aula recomendado',
+      ));
+    } else if (_classroomFilter != null) {
+      final id = _classroomFilter!;
+      final data = classroomData[id];
+      final teacher = (data?['teacherName'] ?? '').toString().trim();
+      final hasTeacher = teacher.isNotEmpty;
+      final schedule = data?['schedule'];
+      final hasSchedule = schedule is Map && schedule.isNotEmpty;
+      final isActive = data?['isActive'] as bool? ?? true;
+
+      title = classroomMap[id] ?? 'Aula seleccionada';
+      subtitle = '$visibleCount estudiantes visibles';
+      tags.add(_SummaryTag(
+        icon: Icons.person_outline_rounded,
+        label: hasTeacher ? teacher : 'Sin docente',
+      ));
+      tags.add(_SummaryTag(
+        icon: Icons.schedule_rounded,
+        label: hasSchedule ? 'Horario listo' : 'Sin horario',
+      ));
+      tags.add(_SummaryTag(
+        icon: isActive
+            ? Icons.check_circle_outline_rounded
+            : Icons.block_rounded,
+        label: isActive ? 'Activa' : 'Inactiva',
+      ));
+    } else {
+      title = 'Todos los estudiantes';
+      subtitle = '$visibleCount visibles en esta vista';
+      tags.add(const _SummaryTag(
+        icon: Icons.apartment_outlined,
+        label: 'Todas las aulas',
+      ));
+    }
+
+    if (_statusFilter != _StatusFilter.all) {
+      tags.add(_SummaryTag(
+        icon: Icons.flag_outlined,
+        label: _statusLabel(_statusFilter),
+      ));
+    }
+    if (_query.isNotEmpty) {
+      tags.add(const _SummaryTag(
+        icon: Icons.search_rounded,
+        label: 'Busqueda activa',
+      ));
+    }
+    for (final filter in _secondaryFilters) {
+      tags.add(_SummaryTag(
+        icon: Icons.tune_rounded,
+        label: _secondaryLabel(filter),
+      ));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AdminUi.pagePaddingTablet),
+      child: Container(
+        decoration: AdminUi.cardDecoration(elevated: false),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: AdminUi.softBg(AdminUi.primary),
+                borderRadius: AppDesignSystem.borderRadiusSM,
+              ),
+              child: const Icon(
+                Icons.groups_2_outlined,
+                size: 17,
+                color: AdminUi.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AdminType.bodyStrong),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AdminType.caption),
+                  if (tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: tags,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildBody(bool wide) {
     return StreamBuilder<QuerySnapshot>(
@@ -334,6 +691,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       builder: (context, classSnap) {
         // Build classroomId → display label once; no N+1 queries.
         final classroomMap = <String, String>{};
+        final classroomData = <String, Map<String, dynamic>>{};
         if (classSnap.hasData) {
           for (final doc in classSnap.data!.docs) {
             final d = doc.data() as Map<String, dynamic>;
@@ -346,6 +704,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                     ? name
                     : doc.id;
             classroomMap[doc.id] = label;
+            classroomData[doc.id] = d;
           }
         }
 
@@ -360,28 +719,67 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             }
             final allDocs = snap.data?.docs ?? [];
             final filtered = _applyFilter(allDocs);
+            final contextSummary = _buildContextSummary(
+              visibleCount: filtered.length,
+              classroomMap: classroomMap,
+              classroomData: classroomData,
+            );
 
             if (filtered.isEmpty) {
-              return _emptyState(allDocs.isEmpty);
-            }
-
-            if (wide) {
-              return _WebTable(
-                docs: filtered,
-                classroomMap: classroomMap,
-                onEdit: _showEdit,
-                onQr: _showQrDialog,
-                onTransfer: _showTransfer,
-                onToggle: _confirmToggle,
+              return Column(
+                children: [
+                  contextSummary,
+                  const SizedBox(height: 12),
+                  Expanded(child: _emptyState(allDocs.isEmpty)),
+                ],
               );
             }
-            return _MobileList(
-              docs: filtered,
-              classroomMap: classroomMap,
-              onEdit: _showEdit,
-              onQr: _showQrDialog,
-              onTransfer: _showTransfer,
-              onToggle: _confirmToggle,
+
+            // Paginación cliente: 10 por página sobre la lista filtrada.
+            const perPage = AdminPaginationBar.perPage;
+            final total = filtered.length;
+            final pageCount = (total / perPage).ceil();
+            final page = _page.clamp(0, pageCount - 1);
+            final start = page * perPage;
+            final pageDocs =
+                filtered.sublist(start, (start + perPage).clamp(0, total));
+            // ¿La ventana del servidor podría tener más registros?
+            final canGrow = allDocs.length >= _limit;
+
+            final Widget content = wide
+                ? _WebTable(
+                    docs: pageDocs,
+                    classroomMap: classroomMap,
+                    onEdit: _showEdit,
+                    onQr: _showQrDialog,
+                    onTransfer: _showTransfer,
+                    onToggle: _confirmToggle,
+                  )
+                : _MobileList(
+                    docs: pageDocs,
+                    classroomMap: classroomMap,
+                    onEdit: _showEdit,
+                    onQr: _showQrDialog,
+                    onTransfer: _showTransfer,
+                    onToggle: _confirmToggle,
+                  );
+
+            return Column(
+              children: [
+                contextSummary,
+                const SizedBox(height: 12),
+                Expanded(child: content),
+                AdminPaginationBar(
+                  page: page,
+                  pageCount: pageCount,
+                  totalItems: total,
+                  onPrev:
+                      page > 0 ? () => setState(() => _page = page - 1) : null,
+                  onNext: page < pageCount - 1
+                      ? () => setState(() => _page = page + 1)
+                      : (canGrow ? () => _growWindow(page + 1) : null),
+                ),
+              ],
             );
           },
         );
@@ -428,56 +826,23 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   }
 
   Widget _emptyState(bool noStudents) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.school_outlined,
-              size: 56,
-              color: AppDesignSystem.textSecondary.withValues(alpha: 0.35)),
-          const SizedBox(height: 16),
-          Text(
-            noStudents
-                ? 'No hay estudiantes registrados'
-                : 'No se encontraron estudiantes',
-            style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppDesignSystem.textPrimary),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            noStudents
-                ? 'Crea el primer estudiante con el botón "Nuevo estudiante".'
-                : 'Prueba ajustando el filtro o la búsqueda.',
-            style: const TextStyle(
-                fontSize: 13, color: AppDesignSystem.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
+    return AdminEmptyState(
+      icon: Icons.school_outlined,
+      title: noStudents
+          ? 'No hay estudiantes registrados'
+          : 'No se encontraron estudiantes',
+      message: noStudents
+          ? 'Crea el primer estudiante con el botón "Nuevo estudiante".'
+          : 'Prueba ajustando el filtro o la búsqueda.',
     );
   }
 
   Widget _errorState(String msg) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline_rounded,
-              size: 48, color: AppDesignSystem.errorColor),
-          const SizedBox(height: 12),
-          const Text('Error al cargar estudiantes',
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppDesignSystem.textPrimary)),
-          const SizedBox(height: 4),
-          Text(msg,
-              style: const TextStyle(
-                  fontSize: 12, color: AppDesignSystem.textSecondary)),
-        ],
-      ),
+    return AdminEmptyState(
+      icon: Icons.error_outline_rounded,
+      title: 'Error al cargar estudiantes',
+      message: msg,
+      error: true,
     );
   }
 }
@@ -487,27 +852,13 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _StudentsHeader extends StatelessWidget {
-  final VoidCallback onAdd;
-
-  const _StudentsHeader({required this.onAdd});
+  const _StudentsHeader();
 
   @override
   Widget build(BuildContext context) {
-    return AdminCompactHeader(
+    return const AdminCompactHeader(
       title: 'Gestión de estudiantes',
       subtitle: 'Administra padrón, aulas, QR y apoderados',
-      action: FilledButton.icon(
-            onPressed: onAdd,
-            style: FilledButton.styleFrom(
-              backgroundColor: _kPrimary,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-              shape: RoundedRectangleBorder(
-                  borderRadius: AppDesignSystem.borderRadiusMD),
-            ),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Nuevo estudiante'),
-          ),
     );
   }
 }
@@ -515,6 +866,272 @@ class _StudentsHeader extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // WEB TABLE
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Selector de aula con estilo de chip/input (PopupMenuButton). Sentinela
+/// `_allAulas` representa "Todas las aulas" (filtro = null).
+class _AulaDropdown extends StatelessWidget {
+  static const String allAulas = '__all__';
+  static const String withoutAula = '__without__';
+
+  final String currentLabel;
+  final String selectedValue;
+  final List<({String id, String label})> options;
+  final ValueChanged<String> onSelected;
+  final bool fullWidth;
+
+  const _AulaDropdown({
+    required this.currentLabel,
+    required this.selectedValue,
+    required this.options,
+    required this.onSelected,
+    required this.fullWidth,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final menuMaxWidth = fullWidth ? 420.0 : 320.0;
+    final field = Container(
+      height: AdminUi.fieldHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AdminUi.surface,
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        border: Border.all(
+          color: selectedValue != allAulas
+              ? _kPrimary.withValues(alpha: 0.45)
+              : _kBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.class_outlined,
+              size: 18,
+              color: selectedValue != allAulas
+                  ? _kPrimary
+                  : AdminUi.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              currentLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminType.bodySm.copyWith(
+                fontWeight:
+                    selectedValue != allAulas ? FontWeight.w600 : FontWeight.w500,
+                color:
+                    selectedValue != allAulas ? _kPrimary : AdminUi.textPrimary,
+              ),
+            ),
+          ),
+          Icon(Icons.arrow_drop_down_rounded,
+              size: 20, color: AdminUi.textSecondary),
+        ],
+      ),
+    );
+
+    return PopupMenuButton<String>(
+      tooltip: 'Filtrar por aula',
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      constraints: BoxConstraints(minWidth: 240, maxWidth: menuMaxWidth),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        side: const BorderSide(color: AdminUi.border),
+      ),
+      onSelected: onSelected,
+      itemBuilder: (_) => [
+        _item(allAulas, 'Todas las aulas', selectedValue == allAulas),
+        _item(withoutAula, 'Sin aula', selectedValue == withoutAula),
+        ...options.map((o) => _item(o.id, o.label, o.id == selectedValue)),
+      ],
+      child: field,
+    );
+  }
+
+  PopupMenuItem<String> _item(String value, String label, bool selected) {
+    final defaultIcon = value == withoutAula
+        ? Icons.person_off_outlined
+        : (value == allAulas ? Icons.apartment_outlined : Icons.class_outlined);
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(
+            selected ? Icons.check_rounded : defaultIcon,
+            size: 16,
+            color: selected ? _kPrimary : AdminUi.textSecondary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminType.bodySm.copyWith(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? _kPrimary : AdminUi.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarDropdown<T> extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final Map<T, String> options;
+  final T? selected;
+  final Set<T>? selectedValues;
+  final ValueChanged<T>? onSelected;
+  final ValueChanged<T>? onSelectedMulti;
+  final bool multi;
+  final bool highlighted;
+
+  const _ToolbarDropdown({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.options,
+    this.selected,
+    this.selectedValues,
+    this.onSelected,
+    this.onSelectedMulti,
+    this.multi = false,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = highlighted || (multi
+        ? (selectedValues?.isNotEmpty ?? false)
+        : selected != null);
+
+    final trigger = Container(
+      height: AdminUi.fieldHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AdminUi.surface,
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        border: Border.all(
+          color: active ? _kPrimary.withValues(alpha: 0.45) : _kBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: active ? _kPrimary : AdminUi.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AdminType.bodySm.copyWith(
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                color: active ? _kPrimary : AdminUi.textPrimary,
+              ),
+            ),
+          ),
+          const Icon(
+            Icons.arrow_drop_down_rounded,
+            size: 20,
+            color: AdminUi.textSecondary,
+          ),
+        ],
+      ),
+    );
+
+    return PopupMenuButton<T>(
+      tooltip: tooltip,
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        side: const BorderSide(color: AdminUi.border),
+      ),
+      onSelected: (value) {
+        if (multi) {
+          onSelectedMulti?.call(value);
+        } else {
+          onSelected?.call(value);
+        }
+      },
+      itemBuilder: (_) => options.entries.map((entry) {
+        final isSelected = multi
+            ? (selectedValues?.contains(entry.key) ?? false)
+            : selected == entry.key;
+        return PopupMenuItem<T>(
+          value: entry.key,
+          child: Row(
+            children: [
+              Icon(
+                isSelected ? Icons.check_rounded : Icons.radio_button_unchecked,
+                size: 16,
+                color: isSelected ? _kPrimary : AdminUi.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  entry.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AdminType.bodySm.copyWith(
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? _kPrimary : AdminUi.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+      child: trigger,
+    );
+  }
+}
+
+class _SummaryTag extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _SummaryTag({
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AdminUi.surface2,
+        border: Border.all(color: AdminUi.border),
+        borderRadius: AppDesignSystem.borderRadiusFull,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AdminUi.textSecondary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: AdminType.caption.copyWith(
+              color: AdminUi.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _WebTable extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
@@ -544,24 +1161,8 @@ class _WebTable extends StatelessWidget {
         decoration: AdminUi.cardDecoration(elevated: false),
         child: Column(
           children: [
-            // Header
-            Container(
-              decoration: AdminUi.tableHeaderDecoration(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-              child: const Row(
-                children: [
-                  SizedBox(width: 36),
-                  SizedBox(width: 12),
-                  Expanded(flex: 3, child: _ColHeader('ESTUDIANTE')),
-                  SizedBox(width: 80, child: _ColHeader('DNI')),
-                  Expanded(flex: 2, child: _ColHeader('AULA')),
-                  Expanded(flex: 2, child: _ColHeader('APODERADO / TEL.')),
-                  SizedBox(width: 72, child: _ColHeader('QR')),
-                  SizedBox(width: 90, child: _ColHeader('ESTADO')),
-                  SizedBox(width: 124),
-                ],
-              ),
-            ),
+            // Header (misma spec de columnas que las filas)
+            AdminTable.headerRow(_studentColumns),
             // Rows
             Expanded(
               child: ListView.builder(
@@ -584,19 +1185,6 @@ class _WebTable extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ColHeader extends StatelessWidget {
-  final String text;
-  const _ColHeader(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AdminUi.tableHeaderTextStyle,
     );
   }
 }
@@ -639,174 +1227,194 @@ class _TableRowState extends State<_TableRow> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        height: 60,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: AdminTable.rowHeight,
+        padding: AdminTable.rowPadding,
         decoration: AdminUi.rowDecoration(
           hovered: _hovered,
           isLast: widget.isLast,
         ),
-        child: Row(
-          children: [
-            // Avatar
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: s.isActive
-                  ? _kPrimary.withValues(alpha: 0.12)
-                  : _kBorder,
-              child: Text(
-                s.firstName.isNotEmpty ? s.firstName[0].toUpperCase() : '?',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: s.isActive ? _kPrimary : AppDesignSystem.textSecondary,
+        child: AdminTable.dataRow(_studentColumns, [
+          // ESTUDIANTE — avatar + nombre (+ email) como celda compuesta.
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: s.isActive
+                    ? _kPrimary.withValues(alpha: 0.12)
+                    : _kBorder,
+                child: Text(
+                  s.firstName.isNotEmpty ? s.firstName[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color:
+                        s.isActive ? _kPrimary : AppDesignSystem.textSecondary,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Name
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    s.fullName,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppDesignSystem.textPrimary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (s.parentEmail != null && s.parentEmail!.isNotEmpty)
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                     Text(
-                      s.parentEmail!,
-                      style: const TextStyle(
-                          fontSize: 10.5,
-                          color: AppDesignSystem.textSecondary),
+                      s.fullName,
+                      style: AdminType.bodyStrong,
                       overflow: TextOverflow.ellipsis,
                     ),
-                ],
-              ),
-            ),
-            // DNI
-            SizedBox(
-              width: 80,
-              child: Text(
-                s.dni.isNotEmpty ? s.dni : '—',
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppDesignSystem.textSecondary),
-              ),
-            ),
-            // Classroom
-            Expanded(
-              flex: 2,
-              child: Text(
-                widget.classroomLabel,
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppDesignSystem.textSecondary),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Parent / phone
-            Expanded(
-              flex: 2,
-              child: Text(
-                hasPhone ? s.parentPhone! : '—',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: hasPhone
-                      ? AppDesignSystem.textPrimary
-                      : AppDesignSystem.textSecondary,
+                    if (s.parentEmail != null && s.parentEmail!.isNotEmpty)
+                      Text(
+                        s.parentEmail!,
+                        style: AdminType.caption,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
+            ],
+          ),
+          // DNI (texto, izquierda)
+          Text(
+            s.dni.isNotEmpty ? s.dni : '—',
+            style: AdminType.bodySm.copyWith(color: AppDesignSystem.textSecondary),
+          ),
+          // AULA (texto, izquierda)
+          Text(
+            widget.classroomLabel,
+            style: AdminType.bodySm.copyWith(color: AppDesignSystem.textSecondary),
+            overflow: TextOverflow.ellipsis,
+          ),
+          // APODERADO / TEL. (texto, izquierda)
+          Text(
+            hasPhone ? s.parentPhone! : '—',
+            style: AdminType.bodySm.copyWith(
+              color: hasPhone
+                  ? AppDesignSystem.textPrimary
+                  : AppDesignSystem.textSecondary,
             ),
-            // QR chip
-            SizedBox(
-              width: 72,
-              child: _QrChip(hasQr: hasQr),
-            ),
-            // Status chip
-            SizedBox(
-              width: 90,
-              child: _StatusChip(isActive: s.isActive),
-            ),
-            // Actions
-            SizedBox(
-              width: 124,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _ActionIcon(
-                    icon: Icons.edit_outlined,
-                    tooltip: 'Editar datos',
-                    color: _kPrimary,
-                    onTap: () => widget.onEdit(s),
-                  ),
-                  _ActionIcon(
-                    icon: Icons.swap_horiz_rounded,
-                    tooltip: 'Transferir aula',
-                    color: AppDesignSystem.warningColor,
-                    onTap: () => widget.onTransfer(s),
-                  ),
-                  _ActionIcon(
-                    icon: Icons.qr_code_rounded,
-                    tooltip: 'Ver QR / Telegram',
-                    color: const Color(0xFF00695C),
-                    onTap: () => widget.onQr(s),
-                  ),
-                  _ActionIcon(
-                    icon: s.isActive
-                        ? Icons.block_rounded
-                        : Icons.check_circle_outline_rounded,
-                    tooltip: s.isActive ? 'Desactivar' : 'Activar',
-                    color: s.isActive
-                        ? AppDesignSystem.errorColor
-                        : AppDesignSystem.successColor,
-                    onTap: () => widget.onToggle(s),
-                  ),
-                ],
+            overflow: TextOverflow.ellipsis,
+          ),
+          // QR (chip centrado)
+          _QrChip(hasQr: hasQr),
+          // ESTADO (chip centrado)
+          _StatusChip(isActive: s.isActive),
+          // ACCIONES (Editar visible + menú "⋯", derecha)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AdminActionIcon(
+                icon: Icons.edit_outlined,
+                tooltip: 'Editar datos',
+                onTap: () => widget.onEdit(s),
               ),
-            ),
-          ],
-        ),
+              _RowMenu(
+                isActive: s.isActive,
+                onQr: () => widget.onQr(s),
+                onTransfer: () => widget.onTransfer(s),
+                onToggle: () => widget.onToggle(s),
+              ),
+            ],
+          ),
+        ]),
       ),
     );
   }
 }
 
-class _ActionIcon extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color color;
-  final VoidCallback onTap;
+/// Menú "⋯" que agrupa acciones secundarias del estudiante para reducir ruido
+/// en la fila. Conserva acciones reales: ver QR/Telegram, transferir aula y
+/// activar/desactivar.
+class _RowMenu extends StatelessWidget {
+  final bool isActive;
+  final VoidCallback onQr;
+  final VoidCallback onTransfer;
+  final VoidCallback onToggle;
 
-  const _ActionIcon({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onTap,
+  const _RowMenu({
+    required this.isActive,
+    required this.onQr,
+    required this.onTransfer,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fg = color == AppDesignSystem.errorColor
-        ? AppDesignSystem.errorColor
-        : AdminUi.neutralAction;
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        borderRadius: AppDesignSystem.borderRadiusSM,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 17, color: fg),
-        ),
+    return PopupMenuButton<String>(
+      tooltip: 'Más acciones',
+      icon: const Icon(Icons.more_horiz_rounded,
+          size: 18, color: AdminUi.neutralAction),
+      padding: EdgeInsets.zero,
+      splashRadius: 18,
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        side: const BorderSide(color: AdminUi.border),
       ),
+      onSelected: (v) {
+        switch (v) {
+          case 'qr':
+            onQr();
+            break;
+          case 'transfer':
+            onTransfer();
+            break;
+          case 'toggle':
+            onToggle();
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          value: 'qr',
+          child: Row(
+            children: [
+              const Icon(Icons.qr_code_rounded,
+                  size: 18, color: Color(0xFF00695C)),
+              const SizedBox(width: 10),
+              Text('Ver QR / Telegram', style: AdminType.bodySm),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'transfer',
+          child: Row(
+            children: [
+              const Icon(Icons.swap_horiz_rounded,
+                  size: 18, color: AdminUi.neutralAction),
+              const SizedBox(width: 10),
+              Text('Transferir aula', style: AdminType.bodySm),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'toggle',
+          child: Row(
+            children: [
+              Icon(
+                isActive
+                    ? Icons.block_rounded
+                    : Icons.check_circle_outline_rounded,
+                size: 18,
+                color: isActive
+                    ? AppDesignSystem.errorColor
+                    : AppDesignSystem.successColor,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                isActive ? 'Desactivar estudiante' : 'Activar estudiante',
+                style: AdminType.bodySm.copyWith(
+                  color: isActive
+                      ? AppDesignSystem.errorColor
+                      : AppDesignSystem.successColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

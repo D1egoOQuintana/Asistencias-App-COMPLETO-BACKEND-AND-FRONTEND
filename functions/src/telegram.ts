@@ -5,6 +5,7 @@
 
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { getFirestore } from 'firebase-admin/firestore';
 import axios from 'axios';
 
@@ -1087,3 +1088,308 @@ Hubo un problema procesando su código. Por favor, inténtelo nuevamente en unos
     });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICACIÓN DE INASISTENCIA (AUSENCIA)
+//
+// La ausencia no genera ningún documento, así que se DETECTA comparando los
+// estudiantes activos del aula contra quienes registraron asistencia hoy.
+// - Manual:     onCall `notifyClassroomAbsences` (botón en la app)
+// - Automático: onSchedule `notifyAbsencesScheduled` corre periódicamente y,
+//               por cada aula, notifica al pasar el endTime del horario del día.
+// Solo notifica a apoderados con `parentTelegramChatId` (vinculados al bot).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const WEEKDAY_KEYS = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+];
+
+// Hora/minuto/día-semana actuales en zona horaria de Lima.
+function getLimaNowParts(now: Date): { hour: number; minute: number; weekday: string; dayKey: string } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Lima',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    weekday: 'long',
+  }).formatToParts(now);
+
+  let hour = 0;
+  let minute = 0;
+  let weekdayName = '';
+  for (const p of parts) {
+    if (p.type === 'hour') hour = parseInt(p.value, 10);
+    if (p.type === 'minute') minute = parseInt(p.value, 10);
+    if (p.type === 'weekday') weekdayName = p.value.toLowerCase();
+  }
+  // '24' a veces aparece para medianoche según runtime; normalizar.
+  if (hour === 24) hour = 0;
+
+  return {
+    hour,
+    minute,
+    weekday: weekdayName,
+    dayKey: getDayKeyLima(now),
+  };
+}
+
+// Convierte "HH:mm" en minutos desde medianoche. Devuelve null si inválido.
+function parseHHmmToMinutes(value: any): number | null {
+  if (typeof value !== 'string') return null;
+  const m = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (isNaN(h) || isNaN(min) || h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+function formatLimaDate(dayKey: string): string {
+  // dayKey es YYYY-MM-DD; formatear amigable es-PE.
+  try {
+    const d = new Date(`${dayKey}T12:00:00`);
+    return d.toLocaleDateString('es-PE', { timeZone: 'America/Lima' });
+  } catch (_e) {
+    return dayKey;
+  }
+}
+
+function classroomDisplayName(data: any): string {
+  const grade = (data?.grade ?? '').toString().trim();
+  const section = (data?.section ?? '').toString().trim();
+  const name = (data?.name ?? '').toString().trim();
+  if (grade && section) {
+    return `${grade}° ${section}${name ? ` – ${name}` : ''}`;
+  }
+  return name || 'Aula';
+}
+
+// Envía a un apoderado (ya vinculado) el aviso de inasistencia.
+async function sendAbsenceNotification(
+  student: any,
+  classroomName: string,
+  dayKey: string,
+): Promise<boolean> {
+  const chatId = student?.parentTelegramChatId;
+  if (!chatId) return false;
+
+  const studentName = getStudentDisplayName(student);
+  const firstName = studentName.split(' ')[0] || studentName;
+  const message = `⚠️ *Inasistencia*
+
+👨‍🎓 *Estudiante:* ${studentName}
+📚 *Clase:* ${classroomName}
+📅 *Fecha:* ${formatLimaDate(dayKey)}
+
+❌ ${firstName} no registró asistencia hoy. Si cree que es un error, comuníquese con la institución educativa.`;
+
+  await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    chat_id: chatId,
+    text: message,
+    parse_mode: 'Markdown',
+  });
+  return true;
+}
+
+/**
+ * Calcula los ausentes de un aula en una fecha y notifica por Telegram a los
+ * apoderados vinculados. Idempotente por estudiante/día vía
+ * `lastTelegramNotifiedEventKeys[<dayKey>_absence]`.
+ */
+async function computeAndNotifyAbsences(
+  classroomId: string,
+  dayKey: string,
+): Promise<{ total: number; absent: number; notified: number; skippedNoChat: number; alreadyNotified: number }> {
+  const result = { total: 0, absent: 0, notified: 0, skippedNoChat: 0, alreadyNotified: 0 };
+
+  const classroomSnap = await db.collection('classrooms').doc(classroomId).get();
+  if (!classroomSnap.exists) return result;
+  const classroomName = classroomDisplayName(classroomSnap.data());
+
+  // 1) Estudiantes activos del aula.
+  const studentsSnap = await db
+    .collection('students')
+    .where('classroomId', '==', classroomId)
+    .where('isActive', '==', true)
+    .get();
+  result.total = studentsSnap.size;
+  if (studentsSnap.empty) return result;
+
+  // 2) Asistencia del día (subcolección del aula). Set de studentId presentes.
+  const presentIds = new Set<string>();
+  const attendanceSnap = await db
+    .collection('classrooms')
+    .doc(classroomId)
+    .collection('attendance')
+    .where('date', '==', dayKey)
+    .get();
+  for (const doc of attendanceSnap.docs) {
+    const sid = (doc.data()?.studentId ?? '').toString().trim();
+    if (sid) presentIds.add(sid);
+  }
+
+  const absenceKey = `${dayKey}_absence`;
+
+  // 3) Ausentes = activos sin registro hoy → notificar a vinculados.
+  for (const stuDoc of studentsSnap.docs) {
+    const student: any = stuDoc.data();
+    if (presentIds.has(stuDoc.id)) continue;
+    result.absent += 1;
+
+    const notifiedKeys = student?.lastTelegramNotifiedEventKeys || {};
+    if (notifiedKeys?.[absenceKey] === true) {
+      result.alreadyNotified += 1;
+      continue;
+    }
+
+    if (!student?.parentTelegramChatId) {
+      result.skippedNoChat += 1;
+      continue;
+    }
+
+    try {
+      const sent = await sendAbsenceNotification(
+        { ...student, _id: stuDoc.id },
+        classroomName,
+        dayKey,
+      );
+      if (sent) {
+        result.notified += 1;
+        await stuDoc.ref.set({
+          lastTelegramNotifiedEventKeys: {
+            ...(notifiedKeys || {}),
+            [absenceKey]: true,
+          },
+        }, { merge: true });
+        await logTelegramEvent({ type: 'absence.sent', studentId: stuDoc.id, classroomId, dayKey });
+      }
+    } catch (e) {
+      await logTelegramEvent({ type: 'absence.error', studentId: stuDoc.id, classroomId, dayKey, error: String(e) });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * MANUAL — el docente/admin dispara la notificación de ausentes de un aula.
+ * data: { classroomId: string, date?: 'YYYY-MM-DD' }
+ */
+export const notifyClassroomAbsences = onCall({
+  memory: '256MiB',
+  timeoutSeconds: 120,
+  maxInstances: 5,
+}, async (request) => {
+  const uid = request.auth?.uid;
+  const roleHint = String(request.auth?.token?.role || '').trim();
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Usuario no autenticado');
+  }
+
+  const classroomId = String(request.data?.classroomId || '').trim();
+  if (!classroomId) {
+    throw new HttpsError('invalid-argument', 'classroomId es requerido');
+  }
+
+  // Permisos: admin, o docente dueño del aula.
+  const role = await getUserRole(uid, roleHint);
+  if (role !== 'admin') {
+    const classroomDoc = await db.collection('classrooms').doc(classroomId).get();
+    if (!classroomDoc.exists) {
+      throw new HttpsError('not-found', 'Aula no encontrada');
+    }
+    const cd = classroomDoc.data() || {};
+    const owns =
+      String(cd.teacherUid || '').trim() === uid ||
+      String(cd.teacherId || '').trim() === uid ||
+      String(cd.ownerUid || '').trim() === uid;
+    if (!owns) {
+      throw new HttpsError('permission-denied', 'No tienes permisos sobre esta aula');
+    }
+  }
+
+  const dayKey = String(request.data?.date || getDayKeyLima(new Date())).trim();
+  const r = await computeAndNotifyAbsences(classroomId, dayKey);
+
+  await logTelegramEvent({ type: 'absence.manual', uid, classroomId, dayKey, ...r });
+
+  return {
+    success: true,
+    dayKey,
+    ...r,
+  };
+});
+
+/**
+ * AUTOMÁTICO — corre cada 30 min y, por cada aula activa, notifica ausentes
+ * una vez que ha pasado el endTime del horario del día. Marca el aula con
+ * `lastAbsenceNotifiedDayKey` para no repetir el mismo día.
+ *
+ * Requiere Cloud Scheduler (plan Blaze). Zona horaria: America/Lima.
+ */
+export const notifyAbsencesScheduled = onSchedule({
+  schedule: 'every 30 minutes',
+  timeZone: 'America/Lima',
+  memory: '256MiB',
+  timeoutSeconds: 300,
+  maxInstances: 1,
+}, async () => {
+  const now = new Date();
+  const { hour, minute, weekday, dayKey } = getLimaNowParts(now);
+  const nowMinutes = hour * 60 + minute;
+
+  const classroomsSnap = await db
+    .collection('classrooms')
+    .where('isActive', '==', true)
+    .get();
+
+  let processed = 0;
+  let totalNotified = 0;
+
+  for (const classDoc of classroomsSnap.docs) {
+    const data: any = classDoc.data();
+
+    // Ya notificado hoy → saltar.
+    if (data?.lastAbsenceNotifiedDayKey === dayKey) continue;
+
+    // Horario del día actual.
+    const schedule = data?.schedule;
+    if (!schedule || typeof schedule !== 'object') continue;
+    const todaySchedule = schedule[weekday];
+    if (!todaySchedule) continue; // no hay clase hoy
+
+    const endMinutes = parseHHmmToMinutes(todaySchedule.endTime);
+    if (endMinutes === null) continue; // sin endTime válido
+
+    // Aún no termina la clase → esperar a la próxima corrida.
+    if (nowMinutes < endMinutes) continue;
+
+    try {
+      const r = await computeAndNotifyAbsences(classDoc.id, dayKey);
+      processed += 1;
+      totalNotified += r.notified;
+
+      // Marcar el aula como ya procesada hoy (aunque notified sea 0, para no
+      // recalcular en cada corrida posterior del mismo día).
+      await classDoc.ref.set({ lastAbsenceNotifiedDayKey: dayKey }, { merge: true });
+
+      await logTelegramEvent({
+        type: 'absence.scheduled',
+        classroomId: classDoc.id,
+        dayKey,
+        weekday,
+        endTime: todaySchedule.endTime,
+        ...r,
+      });
+    } catch (e) {
+      await logTelegramEvent({
+        type: 'absence.scheduled.error',
+        classroomId: classDoc.id,
+        dayKey,
+        error: String(e),
+      });
+    }
+  }
+
+  console.log(`notifyAbsencesScheduled: aulas procesadas=${processed}, notificados=${totalNotified}, dayKey=${dayKey}`);
+});

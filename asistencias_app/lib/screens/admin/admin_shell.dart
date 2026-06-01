@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_design_system.dart';
@@ -9,7 +10,10 @@ import 'students/admin_students_screen.dart';
 // ImprovedClassroomScreen se conserva como respaldo legacy en su archivo original.
 import 'classrooms/admin_classrooms_screen.dart';
 import 'sessions/admin_sessions_screen.dart';
-import 'placeholders/admin_placeholder_screen.dart';
+import 'reports/admin_reports_screen.dart';
+import 'incidents/admin_incidents_screen.dart';
+import 'configuration/admin_configuration_screen.dart';
+import 'widgets/admin_ui.dart';
 
 /// Paleta del Admin Web Panel (ver ADMIN_DESIGN_GUIDE.md).
 const _kCanvas = Color(0xFFF4F6FA);
@@ -20,12 +24,45 @@ const _kPrimary = Color(0xFF1976D2);
 const _kPrimaryLight = Color(0xFF42A5F5);
 const _kBorder = Color(0xFFE6EAF0);
 
+/// Rutas web del Admin Panel (el orden coincide con el índice del sidebar).
+class AdminRoutes {
+  static const dashboard = '/admin/dashboard';
+  static const docentes = '/admin/docentes';
+  static const estudiantes = '/admin/estudiantes';
+  static const aulas = '/admin/aulas';
+  static const sesiones = '/admin/sesiones';
+  static const reportes = '/admin/reportes';
+  static const incidencias = '/admin/incidencias';
+  static const configuracion = '/admin/configuracion';
+
+  /// Rutas por índice de sección (mismo orden que los módulos del sidebar).
+  static const byIndex = <String>[
+    dashboard,
+    docentes,
+    estudiantes,
+    aulas,
+    sesiones,
+    reportes,
+    incidencias,
+    configuracion,
+  ];
+
+  static int indexOf(String route) {
+    final i = byIndex.indexOf(route);
+    return i < 0 ? 0 : i;
+  }
+}
+
 /// Shell responsivo del panel de administración.
 /// Desktop (≥1200px): sidebar expandido 240px + topbar 64px.
 /// Tablet  (600–1199px): rail compacto navy 72px + topbar 56px.
 /// Mobile  (<600px): AppBar navy + BottomNavigationBar.
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key});
+  /// Índice de sección (orden del sidebar / [AdminRoutes.byIndex]). Lo provee
+  /// la ruta web actual (p. ej. `/admin/estudiantes` → 2).
+  final int sectionIndex;
+
+  const AdminShell({super.key, this.sectionIndex = 0});
 
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -33,65 +70,41 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell>
     with AutomaticKeepAliveClientMixin {
-  int _selectedIndex = 0;
-  late final List<Widget> _screens;
-
   @override
   bool get wantKeepAlive => true;
 
-  @override
-  void initState() {
-    super.initState();
-    _screens = _buildScreens();
+  /// Navega por RUTA: la URL refleja la sección y el back/forward del navegador
+  /// funciona. (Sin keep-alive: cada sección se construye al entrar.)
+  void _select(int i) {
+    if (i == widget.sectionIndex) return;
+    Get.toNamed(AdminRoutes.byIndex[i]);
   }
 
-  List<Widget> _buildScreens() => [
-        AdminDashboardScreen(
-          onNavigate: (i) => setState(() => _selectedIndex = i),
-        ),
-        const AdminTeachersScreen(),
-        const AdminStudentsScreen(),
-        const AdminClassroomsScreen(),
-        const AdminSessionsScreen(),
-        const AdminPlaceholderScreen(
-          title: 'Reportes Institucionales',
-          description:
-              'Genera reportes globales de asistencia por aula, docente y período académico.',
-          icon: Icons.bar_chart_rounded,
-          accentColor: Color(0xFF00695C),
-          bullets: [
-            'Generar reportes consolidados de asistencia en PDF y Excel.',
-            'Comparar porcentajes de asistencia entre aulas y períodos.',
-            'Exportar y compartir reportes con la dirección y la UGEL.',
-          ],
-        ),
-        const AdminPlaceholderScreen(
-          title: 'Incidencias',
-          description:
-              'Registro y seguimiento de incidencias, tardanzas e inasistencias reiteradas.',
-          icon: Icons.warning_amber_rounded,
-          accentColor: Color(0xFFE65100),
-          bullets: [
-            'Recibir alertas automáticas de inasistencias reiteradas.',
-            'Registrar y clasificar incidencias por severidad.',
-            'Notificar a apoderados vía la integración de Telegram.',
-          ],
-        ),
-        const AdminPlaceholderScreen(
-          title: 'Configuración',
-          description:
-              'Gestiona períodos académicos, códigos de activación e integraciones del sistema.',
-          icon: Icons.settings_rounded,
-          accentColor: Color(0xFF6A1B9A),
-          bullets: [
-            'Administrar períodos académicos y cierre de año escolar.',
-            'Generar y revocar códigos de activación de cuentas.',
-            'Configurar la integración con el bot de Telegram.',
-          ],
-        ),
-      ];
+  /// Construye SOLO la pantalla de la sección actual (sin IndexedStack):
+  /// menor memoria; el estado se reinicia por navegación (trade-off aceptado).
+  Widget _screenForIndex(int i) {
+    switch (i) {
+      case 1:
+        return const AdminTeachersScreen();
+      case 2:
+        return const AdminStudentsScreen();
+      case 3:
+        return const AdminClassroomsScreen();
+      case 4:
+        return const AdminSessionsScreen();
+      case 5:
+        return const AdminReportsScreen();
+      case 6:
+        return const AdminIncidentsScreen();
+      case 7:
+        return const AdminConfigurationScreen();
+      case 0:
+      default:
+        return AdminDashboardScreen(onNavigate: _select);
+    }
+  }
 
-  // ── Módulos (orden = índice de _screens) ──────────────────────────────────
+  // ── Módulos (orden = índice de sección / AdminRoutes.byIndex) ──────────────
 
   static const _modules = <_AdminModule>[
     _AdminModule(
@@ -128,6 +141,7 @@ class _AdminShellState extends State<AdminShell>
       icon: Icons.event_note_outlined,
       iconSelected: Icons.event_note_rounded,
       section: 'OPERACIÓN',
+      hidden: true,
     ),
     _AdminModule(
       label: 'Reportes',
@@ -135,7 +149,6 @@ class _AdminShellState extends State<AdminShell>
       icon: Icons.bar_chart_outlined,
       iconSelected: Icons.bar_chart_rounded,
       section: 'OPERACIÓN',
-      isPlaceholder: true,
     ),
     _AdminModule(
       label: 'Incidencias',
@@ -143,7 +156,6 @@ class _AdminShellState extends State<AdminShell>
       icon: Icons.warning_amber_outlined,
       iconSelected: Icons.warning_amber_rounded,
       section: 'OPERACIÓN',
-      isPlaceholder: true,
     ),
     _AdminModule(
       label: 'Configuración',
@@ -151,7 +163,6 @@ class _AdminShellState extends State<AdminShell>
       icon: Icons.settings_outlined,
       iconSelected: Icons.settings_rounded,
       section: 'SISTEMA',
-      isPlaceholder: true,
     ),
   ];
 
@@ -176,43 +187,44 @@ class _AdminShellState extends State<AdminShell>
   // ── Layout web (desktop + tablet comparten estructura) ─────────────────────
 
   Widget _buildWeb({required bool expanded}) {
-    final module = _modules[_selectedIndex];
+    final module = _modules[widget.sectionIndex];
     final user = Provider.of<AuthProvider>(context, listen: false).user;
 
     return Scaffold(
       backgroundColor: _kCanvas,
-      body: Row(
+      // Inter para TODO el subárbol admin (topbar, sidebar, placeholders y
+      // pantallas). No afecta login ni la app docente (otros subárboles).
+      body: DefaultTextStyle.merge(
+        style: AdminUi.fontBase,
+        child: Row(
         children: [
           _AdminSidebar(
             modules: _modules,
-            selectedIndex: _selectedIndex,
+            selectedIndex: widget.sectionIndex,
             expanded: expanded,
             userName: user?.fullName ?? 'Administrador',
             userRole: user?.role.displayName ?? 'Administrador',
             initials: _initials(user?.fullName ?? ''),
-            onSelect: (i) => setState(() => _selectedIndex = i),
+            onSelect: _select,
             onLogout: () => _confirmLogout(context),
           ),
           Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _AdminTopbar(
                   title: module.label,
                   subtitle: module.subtitle,
                   expanded: expanded,
-                  initials: _initials(user?.fullName ?? ''),
-                  userName: user?.fullName ?? 'Administrador',
                 ),
                 Expanded(
-                  child: IndexedStack(
-                    index: _selectedIndex,
-                    children: _screens,
-                  ),
+                  child: _screenForIndex(widget.sectionIndex),
                 ),
               ],
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -220,18 +232,21 @@ class _AdminShellState extends State<AdminShell>
   // ── Layout mobile ──────────────────────────────────────────────────────────
 
   Widget _buildMobile() {
-    final mobileModules = [
-      _modules[0],
-      _modules[1],
-      _modules[2],
-      _modules[3],
-      _modules[4],
-    ];
+    // Toma los primeros 5 módulos NO ocultos para el bottom nav, preservando su índice
+    // global (necesario para routing — _select usa AdminRoutes.byIndex).
+    final mobileModules = <({int globalIndex, _AdminModule module})>[];
+    for (var i = 0; i < _modules.length && mobileModules.length < 5; i++) {
+      if (_modules[i].hidden) continue;
+      mobileModules.add((globalIndex: i, module: _modules[i]));
+    }
 
     return Scaffold(
       backgroundColor: _kCanvas,
       appBar: _buildMobileAppBar(),
-      body: IndexedStack(index: _selectedIndex, children: _screens),
+      body: DefaultTextStyle.merge(
+        style: AdminUi.fontBase,
+        child: _screenForIndex(widget.sectionIndex),
+      ),
       bottomNavigationBar: _buildMobileBottomNav(mobileModules),
     );
   }
@@ -239,7 +254,8 @@ class _AdminShellState extends State<AdminShell>
   PreferredSizeWidget _buildMobileAppBar() {
     final user = Provider.of<AuthProvider>(context, listen: false).user;
     final initials = _initials(user?.fullName ?? '');
-    final moduleName = _modules[_selectedIndex.clamp(0, _modules.length - 1)].label;
+    final moduleName =
+        _modules[widget.sectionIndex.clamp(0, _modules.length - 1)].label;
 
     return AppBar(
       backgroundColor: _kNavy,
@@ -299,8 +315,8 @@ class _AdminShellState extends State<AdminShell>
     );
   }
 
-  Widget _buildMobileBottomNav(List<_AdminModule> modules) {
-    final effectiveIndex = _selectedIndex.clamp(0, modules.length - 1);
+  Widget _buildMobileBottomNav(
+      List<({int globalIndex, _AdminModule module})> modules) {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -318,12 +334,13 @@ class _AdminShellState extends State<AdminShell>
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           child: Row(
             children: List.generate(modules.length, (i) {
-              final m = modules[i];
-              final selected = effectiveIndex == i;
+              final m = modules[i].module;
+              final globalIndex = modules[i].globalIndex;
+              final selected = widget.sectionIndex == globalIndex;
               return Expanded(
                 child: InkWell(
                   borderRadius: AppDesignSystem.borderRadiusMD,
-                  onTap: () => setState(() => _selectedIndex = i),
+                  onTap: () => _select(globalIndex),
                   child: AnimatedContainer(
                     duration: AppDesignSystem.durationFast,
                     padding: const EdgeInsets.symmetric(
@@ -391,23 +408,16 @@ class _AdminShellState extends State<AdminShell>
         ),
         content: const Text('Se cerrará tu sesión en este dispositivo.'),
         actions: [
-          TextButton(
+          AdminButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppDesignSystem.errorColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: AppDesignSystem.borderRadiusMD,
-              ),
-            ),
+          AdminButton.danger(
+            label: 'Cerrar sesión',
             onPressed: () {
               Navigator.of(ctx).pop();
               Provider.of<AuthProvider>(context, listen: false).signOut();
             },
-            child: const Text('Sí, salir'),
           ),
         ],
       ),
@@ -423,15 +433,11 @@ class _AdminTopbar extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool expanded;
-  final String initials;
-  final String userName;
 
   const _AdminTopbar({
     required this.title,
     required this.subtitle,
     required this.expanded,
-    required this.initials,
-    required this.userName,
   });
 
   @override
@@ -443,147 +449,34 @@ class _AdminTopbar extends StatelessWidget {
         color: Colors.white,
         border: Border(bottom: BorderSide(color: _kBorder)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppDesignSystem.textPrimary,
-                    letterSpacing: -0.2,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (expanded)
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppDesignSystem.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-          if (expanded) ...[
-            _buildSearchBox(),
-            const SizedBox(width: 16),
-          ] else
-            IconButton(
-              icon: const Icon(Icons.search_rounded, color: Color(0xFF5A6B7B)),
-              tooltip: 'Buscar',
-              onPressed: () {},
-            ),
-          _buildNotifications(),
-          const SizedBox(width: 12),
-          _buildProfile(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBox() {
-    return Container(
-      width: 280,
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: _kCanvas,
-        borderRadius: AppDesignSystem.borderRadiusFull,
-        border: Border.all(color: _kBorder),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.search_rounded, size: 18, color: Color(0xFF9AA7B4)),
-          SizedBox(width: 10),
           Text(
-            'Buscar…',
-            style: TextStyle(fontSize: 13, color: Color(0xFF9AA7B4)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotifications() {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          icon: const Icon(
-            Icons.notifications_none_rounded,
-            color: Color(0xFF5A6B7B),
-          ),
-          tooltip: 'Notificaciones',
-          onPressed: () {},
-        ),
-        Positioned(
-          right: 10,
-          top: 10,
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: AppDesignSystem.errorColor,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1.5),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProfile() {
-    final avatar = CircleAvatar(
-      radius: 18,
-      backgroundColor: _kPrimary,
-      child: Text(
-        initials.isEmpty ? 'A' : initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-
-    if (!expanded) return avatar;
-
-    return Row(
-      children: [
-        avatar,
-        const SizedBox(width: 10),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 140),
-          child: Text(
-            userName,
+            title,
             style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
               color: AppDesignSystem.textPrimary,
+              letterSpacing: -0.2,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-        ),
-        const SizedBox(width: 2),
-        const Icon(
-          Icons.keyboard_arrow_down_rounded,
-          size: 18,
-          color: Color(0xFF9AA7B4),
-        ),
-      ],
+          if (expanded)
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppDesignSystem.textSecondary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -703,6 +596,9 @@ class _AdminSidebar extends StatelessWidget {
 
     for (var i = 0; i < modules.length; i++) {
       final m = modules[i];
+      // Saltar módulos ocultos: se preserva el índice global (i) para que la
+      // ruta /admin/<x> siga funcionando si se navega por URL directa.
+      if (m.hidden) continue;
       if (m.section != lastSection) {
         items.add(_buildSectionHeader(m.section));
         lastSection = m.section;
@@ -758,7 +654,9 @@ class _AdminSidebar extends StatelessWidget {
         borderRadius: AppDesignSystem.borderRadiusMD,
         child: InkWell(
           borderRadius: AppDesignSystem.borderRadiusMD,
-          hoverColor: Colors.white.withValues(alpha: 0.05),
+          hoverColor: Colors.white.withValues(alpha: 0.06),
+          splashColor: Colors.white.withValues(alpha: 0.10),
+          highlightColor: Colors.white.withValues(alpha: 0.05),
           onTap: () => onSelect(index),
           child: content,
         ),
@@ -1028,6 +926,9 @@ class _AdminModule {
   final IconData iconSelected;
   final String section;
   final bool isPlaceholder;
+  /// Si `true`, el módulo no aparece en sidebar ni en bottom nav, pero su
+  /// ruta sigue disponible por URL directa.
+  final bool hidden;
 
   const _AdminModule({
     required this.label,
@@ -1035,6 +936,9 @@ class _AdminModule {
     required this.icon,
     required this.iconSelected,
     required this.section,
+    // Conservado por compatibilidad (badge "Pronto"); hoy ningún módulo lo usa.
+    // ignore: unused_element_parameter
     this.isPlaceholder = false,
+    this.hidden = false,
   });
 }

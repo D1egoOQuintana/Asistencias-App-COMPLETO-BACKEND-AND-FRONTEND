@@ -11,6 +11,10 @@ class StudentModel {
   final String classroomId;
   final String? parentEmail;
   final String? parentPhone;
+  /// chatId de Telegram del apoderado, escrito por el BOT al vincularse.
+  /// Solo lectura desde la app (nunca se escribe vía toMap). Sirve para saber
+  /// si el apoderado recibirá notificaciones automáticas (entrada/salida/ausencia).
+  final dynamic parentTelegramChatId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isActive;
@@ -24,6 +28,7 @@ class StudentModel {
     required this.classroomId,
     this.parentEmail,
     this.parentPhone,
+    this.parentTelegramChatId,
     required this.createdAt,
     required this.updatedAt,
     this.isActive = true,
@@ -41,6 +46,7 @@ class StudentModel {
       classroomId: data['classroomId'] ?? '',
       parentEmail: data['parentEmail'],
       parentPhone: data['parentPhone'],
+      parentTelegramChatId: data['parentTelegramChatId'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: data['isActive'] ?? true,
@@ -58,6 +64,7 @@ class StudentModel {
       classroomId: data['classroomId'] ?? '',
       parentEmail: data['parentEmail'],
       parentPhone: data['parentPhone'],
+      parentTelegramChatId: data['parentTelegramChatId'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: data['isActive'] ?? true,

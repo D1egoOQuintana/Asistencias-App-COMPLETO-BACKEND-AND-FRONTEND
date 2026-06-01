@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/attendance_models.dart';
+import 'absentees_notifier_sheet.dart';
 
 class AttendanceCorrectionsScreen extends StatefulWidget {
   final String classroomId;
@@ -81,6 +82,19 @@ class _AttendanceCorrectionsScreenState
     }
 
     return false;
+  }
+
+  void _openAbsenteesNotifier() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AbsenteesNotifierSheet(
+        classroomId: widget.classroomId,
+        classroomLabel: widget.classroomLabel,
+        day: _selectedDay,
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -189,6 +203,13 @@ class _AttendanceCorrectionsScreenState
           'Correccion de asistencias',
           style: TextStyle(fontWeight: FontWeight.w800, fontFamily: 'Manrope'),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Notificar ausentes',
+            onPressed: _openAbsenteesNotifier,
+            icon: const Icon(Icons.notifications_active_rounded),
+          ),
+        ],
       ),
       body: Column(
         children: [

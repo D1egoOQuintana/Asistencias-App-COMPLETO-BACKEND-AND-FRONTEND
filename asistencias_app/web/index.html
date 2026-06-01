@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Panel administrativo del Sistema Inteligente de Asistencia QR.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Asistencia QR">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Sistema Inteligente de Asistencia QR</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Splash institucional mientras inicia Flutter Web -->
+  <style>
+    #app-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: #F7F9FD;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      transition: opacity .35s ease;
+      -webkit-font-smoothing: antialiased;
+    }
+    #app-splash .splash-logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      object-fit: cover;
+      box-shadow: 0 6px 20px rgba(13, 27, 42, 0.10);
+    }
+    #app-splash .splash-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: #0B1F3B;
+      text-align: center;
+      padding: 0 24px;
+      max-width: 520px;
+    }
+    #app-splash .splash-subtitle {
+      font-size: 13px;
+      font-weight: 500;
+      color: #5F6470;
+      margin-top: -8px;
+    }
+    #app-splash .splash-spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid rgba(25, 118, 210, 0.18);
+      border-top-color: #1976D2;
+      border-radius: 50%;
+      animation: splash-spin 0.9s linear infinite;
+      margin-top: 4px;
+    }
+    @keyframes splash-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #app-splash .splash-spinner { animation-duration: 2s; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Overlay de carga institucional (se elimina al primer frame de Flutter) -->
+  <div id="app-splash">
+    <img class="splash-logo" src="icons/Icon-192.png" alt="Logo">
+    <div class="splash-title">Sistema Inteligente de Asistencia QR</div>
+    <div class="splash-subtitle">Cargando panel administrativo&hellip;</div>
+    <div class="splash-spinner"></div>
+  </div>
+
+  <script>
+    // Oculta el splash cuando Flutter renderiza su primer frame.
+    window.addEventListener('flutter-first-frame', function () {
+      var s = document.getElementById('app-splash');
+      if (!s) return;
+      s.style.opacity = '0';
+      setTimeout(function () {
+        if (s && s.parentNode) s.parentNode.removeChild(s);
+      }, 350);
+    });
+  </script>
+
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

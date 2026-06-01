@@ -11,6 +11,35 @@ import '../widgets/admin_ui.dart';
 const _kBorder = Color(0xFFE6EAF0);
 const _kCanvas = Color(0xFFF4F6FA);
 
+// ── Soft Enterprise (ref. Stitch) — tokens locales del Dashboard ────────────
+const _kBg = Color(0xFFF7F9FD); // workspace gris claro (surface Stitch)
+const _kCardBorder = Color(0xFFE6EAF0);
+const _kInk = Color(0xFF191C1F); // on-surface (titulares)
+const _kPrimary = Color(0xFF1976D2);
+
+/// Profundidad "tonal": borde definido + sombra casi imperceptible (no drop
+/// shadow pesado). Coherente con el sistema Soft Enterprise de la referencia.
+const List<BoxShadow> _kSoftShadow = [
+  BoxShadow(color: Color(0x080D1B2A), blurRadius: 3, offset: Offset(0, 1)),
+];
+
+BoxDecoration _surfaceDecoration({double radius = 12}) => BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: _kCardBorder),
+      boxShadow: _kSoftShadow,
+    );
+
+// Anchos de columna COMPARTIDOS (header y filas deben coincidir exacto).
+// Tabla "Aulas registradas":
+const double _cwLead = 36; // avatar
+const double _cwGap = 10;
+const double _cwEstado = 124;
+const double _cwChevron = 28;
+// Lista "Actividad reciente":
+const double _awTime = 46; // hora (columna propia, derecha)
+const double _awStatus = 92; // estado (columna propia, derecha)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,18 +78,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     if (h < 12) return 'Buenos días';
     if (h < 18) return 'Buenas tardes';
     return 'Buenas noches';
-  }
-
-  String get _todayLabel {
-    const days = [
-      'Lunes', 'Martes', 'Miércoles', 'Jueves',
-      'Viernes', 'Sábado', 'Domingo',
-    ];
-    const months = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-    ];
-    return '${days[_now.weekday - 1]}, ${_now.day} de ${months[_now.month - 1]} de ${_now.year}';
   }
 
   @override
@@ -121,25 +138,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     final pad = AdminUi.pagePadding(width);
 
     return Scaffold(
-      backgroundColor: _kCanvas,
-      body: SingleChildScrollView(
+      backgroundColor: _kBg,
+      // Inter SOLO en el subárbol del dashboard (no afecta login ni docente):
+      // el texto con estilos sin fontFamily hereda Inter desde aquí.
+      body: DefaultTextStyle.merge(
+        style: AdminUi.fontBase,
+        child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(pad, pad, pad, 40),
+        padding: EdgeInsets.fromLTRB(pad, pad, pad, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _DashboardHeader(
+            _GreetingHeader(
               greeting: _greeting,
               firstName: firstName,
-              dateLabel: _todayLabel,
-              yearLabel: 'Año lectivo ${_now.year}',
               isDesktop: isDesktop,
+              onNavigate: widget.onNavigate,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            const Divider(height: 1, thickness: 1, color: _kCardBorder),
+            const SizedBox(height: 20),
             _buildKpiGrid(width),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             _buildMainSection(width),
           ],
+        ),
         ),
       ),
     );
@@ -152,42 +175,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       (
         label: 'Docentes activos',
         icon: Icons.school_rounded,
-        color: const Color(0xFF1565C0),
+        color: AdminUi.kpiPrimary, // azul institucional
         ctx: 'Personal registrado',
         stream: _teachersStream,
       ),
       (
         label: 'Aulas activas',
         icon: Icons.class_rounded,
-        color: const Color(0xFF00695C),
+        color: AdminUi.kpiNeutral, // slate (no-semántico)
         ctx: 'Período actual',
         stream: _classroomsStream,
       ),
       (
         label: 'Estudiantes',
         icon: Icons.people_rounded,
-        color: const Color(0xFFE65100),
+        color: AdminUi.kpiInfo, // azul info (no-semántico)
         ctx: 'Matriculados activos',
         stream: _studentsStream,
       ),
       (
         label: 'Asistencias hoy',
         icon: Icons.check_circle_rounded,
-        color: const Color(0xFF2E7D32),
+        color: AdminUi.success, // semántico real: presencia
         ctx: 'Registradas hoy',
         stream: _attendanceTodayStream,
       ),
       (
         label: 'Tardanzas hoy',
         icon: Icons.schedule_rounded,
-        color: const Color(0xFFF57C00),
+        color: AdminUi.warning, // semántico real: tardanza
         ctx: 'Llegadas tardías',
         stream: _lateAttendanceTodayStream,
       ),
       (
         label: 'Sesiones activas',
         icon: Icons.bolt_rounded,
-        color: const Color(0xFF6A1B9A),
+        color: AdminUi.kpiPrimary, // azul institucional (operación)
         ctx: 'En progreso ahora',
         stream: _activeSessionsStream,
       ),
@@ -195,31 +218,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
     return LayoutBuilder(
       builder: (ctx, constraints) {
-        final cols = constraints.maxWidth >= 1200
+        // Ref. Stitch: 6 KPIs en UNA fila en desktop; 3 en tablet; 2 en móvil.
+        final w = constraints.maxWidth;
+        final cols = w >= 1080
             ? 6
-            : constraints.maxWidth >= 900
+            : w >= 720
                 ? 3
                 : 2;
-        final ratio = constraints.maxWidth >= 1200
-            ? 1.28
-            : constraints.maxWidth >= 600
-                ? 1.9
-                : 1.55;
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: cols,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: ratio,
+        const gap = 12.0;
+        final cardW = (w - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
           children: kpis
               .map(
-                (k) => _EnterpriseKpiCard(
-                  label: k.label,
-                  icon: k.icon,
-                  color: k.color,
-                  contextLabel: k.ctx,
-                  stream: k.stream,
+                (k) => SizedBox(
+                  width: cardW,
+                  child: _EnterpriseKpiCard(
+                    label: k.label,
+                    icon: k.icon,
+                    color: k.color,
+                    contextLabel: k.ctx,
+                    stream: k.stream,
+                  ),
                 ),
               )
               .toList(),
@@ -271,13 +292,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(flex: 6, child: _buildClassroomsSection(showTable: true)),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           Expanded(
             flex: 4,
             child: Column(
               children: [
                 _buildActivitySection(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 _buildIncidenciasSection(),
               ],
             ),
@@ -288,9 +309,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return Column(
       children: [
         _buildClassroomsSection(showTable: false),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         _buildActivitySection(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         _buildIncidenciasSection(),
       ],
     );
@@ -370,27 +391,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             );
           }
           return Column(
-            children: docs.map((doc) {
-              final data = doc.data();
-              final name = (data['studentName'] ?? 'Estudiante').toString();
-              final classroom = (data['classroomName'] ?? '').toString();
-              final isExit = data['exitAt'] != null;
-              final isLate = data['isLate'] as bool? ?? false;
-              final ts = data['timestamp'];
-              var timeLabel = '--:--';
-              if (ts is Timestamp) {
-                final dt = ts.toDate();
-                timeLabel =
-                    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-              }
-              return _ActivityRow(
-                name: name,
-                classroom: classroom,
-                time: timeLabel,
-                isExit: isExit,
-                isLate: isLate,
-              );
-            }).toList(),
+            children: [
+              for (var i = 0; i < docs.length; i++) ...[
+                if (i > 0)
+                  const Divider(height: 1, thickness: 1, color: _kCardBorder),
+                Builder(builder: (_) {
+                  final data = docs[i].data();
+                  final name =
+                      (data['studentName'] ?? 'Estudiante').toString();
+                  final classroom = (data['classroomName'] ?? '').toString();
+                  final isExit = data['exitAt'] != null;
+                  final isLate = data['isLate'] as bool? ?? false;
+                  final ts = data['timestamp'];
+                  var timeLabel = '--:--';
+                  if (ts is Timestamp) {
+                    final dt = ts.toDate();
+                    timeLabel =
+                        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                  }
+                  return _ActivityRow(
+                    name: name,
+                    classroom: classroom,
+                    time: timeLabel,
+                    isExit: isExit,
+                    isLate: isLate,
+                  );
+                }),
+              ],
+            ],
           );
         },
       ),
@@ -400,24 +428,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   // ── Incidencias (derived from classrooms stream — no extra query) ───────────
 
   Widget _buildIncidenciasSection() {
-    return _SectionCard(
-      title: 'Incidencias detectadas',
-      icon: Icons.warning_amber_rounded,
-      child: StreamBuilder<QuerySnapshot>(
-        stream: _classroomsStream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _skeletonRows(3);
-          }
-          if (!snapshot.hasData) {
-            return const _EmptyState(
-              icon: Icons.check_circle_outline_rounded,
-              message: 'Sin incidencias detectadas',
-              isSuccess: true,
-            );
-          }
+    return StreamBuilder<QuerySnapshot>(
+      stream: _classroomsStream,
+      builder: (context, snapshot) {
+        final loading =
+            snapshot.connectionState == ConnectionState.waiting;
 
-          final items = <({String label, String reason, bool isWarning})>[];
+        final items = <({String label, String reason, bool isWarning})>[];
+        if (snapshot.hasData) {
           for (final doc in snapshot.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final name = (data['name'] ?? 'Aula').toString();
@@ -444,16 +462,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             // TODO: Aula sin estudiantes — requires N sub-queries; defer to Fase 4.
             // TODO: Sesión activa >4h — requires attendance_sessions timestamp; defer to Fase 4.
           }
+        }
 
-          if (items.isEmpty) {
-            return const _EmptyState(
-              icon: Icons.check_circle_outline_rounded,
-              message: 'Sin incidencias detectadas',
-              isSuccess: true,
-            );
-          }
+        // Badge de conteo real en el header (solo si hay incidencias).
+        final Widget? trailing = (!loading && items.isNotEmpty)
+            ? Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppDesignSystem.warningColor.withValues(alpha: 0.12),
+                  borderRadius: AppDesignSystem.borderRadiusFull,
+                ),
+                child: Text(
+                  '${items.length}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppDesignSystem.warningColor,
+                  ),
+                ),
+              )
+            : null;
 
-          return Column(
+        final Widget body;
+        if (loading) {
+          body = _skeletonRows(3);
+        } else if (items.isEmpty) {
+          body = const _EmptyState(
+            icon: Icons.check_circle_outline_rounded,
+            message: 'Sin incidencias detectadas',
+            isSuccess: true,
+          );
+        } else {
+          body = Column(
             children: items.take(5).map((inc) {
               final color = inc.isWarning
                   ? AppDesignSystem.warningColor
@@ -461,25 +502,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               final bg = inc.isWarning
                   ? const Color(0xFFFFF3E0)
                   : const Color(0xFFE3F0FC);
+              // Sin side-stripe (anti-patrón): borde completo suave + badge de ícono.
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: Container(
                   decoration: BoxDecoration(
                     color: bg,
-                    borderRadius: AppDesignSystem.borderRadiusMD,
-                    border: Border(left: BorderSide(color: color, width: 4)),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: color.withValues(alpha: 0.22)),
                   ),
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
-                      Icon(
-                        inc.isWarning
-                            ? Icons.warning_amber_rounded
-                            : Icons.info_outline_rounded,
-                        size: 18,
-                        color: color,
+                      Container(
+                        width: 34,
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          inc.isWarning
+                              ? Icons.warning_amber_rounded
+                              : Icons.info_outline_rounded,
+                          size: 18,
+                          color: color,
+                        ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,18 +538,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             Text(
                               inc.label,
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 12.5,
                                 fontWeight: FontWeight.w700,
                                 color: AppDesignSystem.textPrimary,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            const SizedBox(height: 1),
                             Text(
                               inc.reason,
                               style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
                                 color: color,
                               ),
                             ),
@@ -511,8 +563,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               );
             }).toList(),
           );
-        },
-      ),
+        }
+
+        return _SectionCard(
+          title: 'Atención requerida',
+          icon: Icons.error_outline_rounded,
+          trailing: trailing,
+          child: body,
+        );
+      },
     );
   }
 
@@ -528,62 +587,100 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HEADER
+// HERO BAND — primera impresión: saludo display + acciones rápidas
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _DashboardHeader extends StatelessWidget {
+class _GreetingHeader extends StatelessWidget {
   final String greeting;
   final String firstName;
-  final String dateLabel;
-  final String yearLabel;
   final bool isDesktop;
+  final ValueChanged<int>? onNavigate;
 
-  const _DashboardHeader({
+  const _GreetingHeader({
     required this.greeting,
     required this.firstName,
-    required this.dateLabel,
-    required this.yearLabel,
     required this.isDesktop,
+    required this.onNavigate,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    // Saludo sobre el canvas (sin card), display grande con jerarquía Stitch.
+    final greetingBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$greeting, $firstName',
-                style: TextStyle(
-                  fontSize: isDesktop ? 18 : 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppDesignSystem.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'Panel institucional de asistencia',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppDesignSystem.textSecondary,
-                ),
-              ),
-            ],
+        Text(
+          '$greeting, $firstName',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: isDesktop ? AdminType.display : AdminType.displaySm,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Panel institucional de asistencia y control general',
+          style: AdminType.bodySm.copyWith(
+            color: AdminUi.textSecondary,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(width: 16),
-        if (isDesktop)
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _DateChip(label: dateLabel, icon: Icons.calendar_today_rounded),
-            const SizedBox(height: 6),
-            _DateChip(label: yearLabel, icon: Icons.school_outlined),
-          ],
+      ],
+    );
+
+    final actions = _QuickActionsRow(onNavigate: onNavigate);
+
+    if (isDesktop) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: greetingBlock),
+          const SizedBox(width: 24),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              actions,
+            ],
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        greetingBlock,
+        const SizedBox(height: 14),
+        actions,
+      ],
+    );
+  }
+}
+
+/// Acciones rápidas sobrias (sin las 4 cards de colores). Reutiliza onNavigate.
+class _QuickActionsRow extends StatelessWidget {
+  final ValueChanged<int>? onNavigate;
+  const _QuickActionsRow({required this.onNavigate});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        AdminButton.primary(
+          label: 'Nuevo docente',
+          icon: Icons.person_add_alt_1_rounded,
+          onPressed: onNavigate == null ? null : () => onNavigate!(1),
+        ),
+        AdminButton.secondary(
+          label: 'Estudiante',
+          icon: Icons.school_outlined,
+          onPressed: onNavigate == null ? null : () => onNavigate!(2),
+        ),
+        AdminButton.secondary(
+          label: 'Aula',
+          icon: Icons.add_box_outlined,
+          onPressed: onNavigate == null ? null : () => onNavigate!(3),
         ),
       ],
     );
@@ -599,16 +696,16 @@ class _DateChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _kCanvas,
         borderRadius: AppDesignSystem.borderRadiusFull,
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: _kCardBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: AppDesignSystem.primaryColor),
+          Icon(icon, size: 13, color: _kPrimary),
           const SizedBox(width: 6),
           Text(
             label,
@@ -651,107 +748,60 @@ class _EnterpriseKpiCard extends StatelessWidget {
         final loading = snap.connectionState == ConnectionState.waiting;
         final hasError = snap.hasError;
         final count = snap.hasData ? snap.data!.docs.length : 0;
+        final accent = hasError ? AppDesignSystem.textDisabled : color;
 
-        return AnimatedContainer(
-            duration: AppDesignSystem.durationFast,
-            padding: const EdgeInsets.all(14),
-            decoration: AdminUi.cardDecoration(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: AppDesignSystem.borderRadiusSM,
-                      ),
-                      child: Icon(icon, size: 18, color: color),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppDesignSystem.successColor.withValues(alpha: 0.08),
-                        borderRadius: AppDesignSystem.borderRadiusFull,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: AppDesignSystem.successColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'En vivo',
-                            style: TextStyle(
-                            fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppDesignSystem.successColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (loading)
-                      _SkeletonBox(
-                        width: 56,
-                        height: 32,
-                        borderRadius: AppDesignSystem.borderRadiusSM,
-                      )
-                    else
-                      Text(
-                        hasError ? 'N/D' : count.toString(),
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: hasError ? AppDesignSystem.textDisabled : color,
-                          letterSpacing: -0.5,
-                          height: 1.1,
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(
+        // KPI compacto (ref. Stitch): etiqueta + ícono arriba, número grande,
+        // contexto corto abajo. Denso, sin sparkline (no hay serie real).
+        return Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          decoration: _surfaceDecoration(radius: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
                       label,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppDesignSystem.textPrimary,
-                      ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      style: AdminType.label.copyWith(height: 1.2),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      contextLabel,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppDesignSystem.textSecondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
+                    child: Icon(icon, size: 16, color: accent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (loading)
+                const AdminSkeletonBox(width: 44, height: 26)
+              else
+                Text(
+                  hasError ? 'N/D' : count.toString(),
+                  style: AdminType.kpiValue.copyWith(
+                    color: hasError ? AppDesignSystem.textDisabled : _kInk,
+                  ),
                 ),
-              ],
-            ),
+              const SizedBox(height: 3),
+              Text(
+                contextLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AdminType.caption,
+              ),
+            ],
+          ),
         );
       },
     );
@@ -779,41 +829,31 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: AdminUi.cardDecoration(),
+      padding: const EdgeInsets.all(20),
+      decoration: _surfaceDecoration(radius: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 28,
-                height: 28,
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppDesignSystem.primaryColor.withValues(alpha: 0.08),
-                  borderRadius: AppDesignSystem.borderRadiusSM,
+                  color: _kPrimary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(
-                  icon,
-                  size: 15,
-                  color: AppDesignSystem.primaryColor,
-                ),
+                child: Icon(icon, size: 18, color: _kPrimary),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppDesignSystem.textPrimary,
-                  ),
-                ),
+                child: Text(title, style: AdminType.sectionTitle),
               ),
               if (trailing != null) trailing!,
             ],
           ),
-          Divider(height: 18, color: _kBorder),
+          const SizedBox(height: 16),
           child,
         ],
       ),
@@ -912,13 +952,24 @@ class _ClassroomWebTable extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: const Row(
               children: [
-                SizedBox(width: 36),
-                SizedBox(width: 10),
+                SizedBox(width: _cwLead),
+                SizedBox(width: _cwGap),
                 Expanded(flex: 4, child: _ColHeader('AULA')),
                 Expanded(flex: 3, child: _ColHeader('GRADO / SECCIÓN')),
-                Expanded(flex: 4, child: _ColHeader('DOCENTE')),
-                Expanded(flex: 3, child: _ColHeader('ESTADO')),
-                SizedBox(width: 28),
+                // Indent 32px (avatar 24 + gap 8) para alinear "DOCENTE" con
+                // el nombre del profesor, no con su mini-avatar.
+                Expanded(
+                  flex: 4,
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.only(start: 32),
+                    child: _ColHeader('DOCENTE'),
+                  ),
+                ),
+                SizedBox(
+                  width: _cwEstado,
+                  child: Center(child: _ColHeader('ESTADO')),
+                ),
+                SizedBox(width: _cwChevron),
               ],
             ),
           ),
@@ -938,10 +989,7 @@ class _ColHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AdminUi.tableHeaderTextStyle,
-    );
+    return Text(text, style: AdminType.overline);
   }
 }
 
@@ -1033,56 +1081,99 @@ class _ClassroomTableRow extends StatelessWidget {
               ),
               Expanded(
                 flex: 4,
-                child: Text(
-                  teacherName.isNotEmpty ? teacherName : '—',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppDesignSystem.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: teacherName.isNotEmpty
+                            ? AdminUi.slate.withValues(alpha: 0.12)
+                            : _kCanvas,
+                        shape: BoxShape.circle,
+                        border: teacherName.isEmpty
+                            ? Border.all(color: _kCardBorder)
+                            : null,
+                      ),
+                      child: teacherName.isNotEmpty
+                          ? Text(
+                              teacherName[0].toUpperCase(),
+                              style: AdminType.caption.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AdminUi.slate,
+                              ),
+                            )
+                          : Icon(Icons.person_off_outlined,
+                              size: 12, color: AppDesignSystem.textDisabled),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        teacherName.isNotEmpty ? teacherName : 'Sin asignar',
+                        style: AdminType.bodySm.copyWith(
+                          color: teacherName.isNotEmpty
+                              ? AppDesignSystem.textPrimary
+                              : AppDesignSystem.textSecondary,
+                          fontWeight: teacherName.isNotEmpty
+                              ? FontWeight.w500
+                              : FontWeight.w400,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Expanded(
-                flex: 3,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusBg,
-                    borderRadius: AppDesignSystem.borderRadiusFull,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          status,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
+              SizedBox(
+                width: _cwEstado,
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: AppDesignSystem.borderRadiusFull,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
                             color: statusColor,
+                            shape: BoxShape.circle,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            status,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: AppDesignSystem.textDisabled,
+              SizedBox(
+                width: _cwChevron,
+                child: Center(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: AppDesignSystem.textDisabled,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1236,19 +1327,49 @@ class _ActivityRow extends StatelessWidget {
       chipBg = const Color(0xFFE6F4EA);
     }
 
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: dotColor,
-              shape: BoxShape.circle,
-            ),
+          // Avatar con inicial + punto de estado superpuesto (ref. Stitch).
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: chipColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  initial,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: chipColor,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: -1,
+                bottom: -1,
+                child: Container(
+                  width: 11,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1276,28 +1397,41 @@ class _ActivityRow extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            time,
-            style: const TextStyle(
-              fontSize: 11.5,
-              color: AppDesignSystem.textSecondary,
-              fontWeight: FontWeight.w500,
+          const SizedBox(width: 12),
+          // Columna HORA (ancho fijo, alineada a la derecha).
+          SizedBox(
+            width: _awTime,
+            child: Text(
+              time,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppDesignSystem.textSecondary,
+                fontWeight: FontWeight.w500,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: chipBg,
-              borderRadius: AppDesignSystem.borderRadiusFull,
-            ),
-            child: Text(
-              chipLabel,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: chipColor,
+          const SizedBox(width: 16),
+          // Columna ESTADO (ancho fijo, chip alineado a la derecha).
+          SizedBox(
+            width: _awStatus,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: chipBg,
+                  borderRadius: AppDesignSystem.borderRadiusFull,
+                ),
+                child: Text(
+                  chipLabel,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: chipColor,
+                  ),
+                ),
               ),
             ),
           ),

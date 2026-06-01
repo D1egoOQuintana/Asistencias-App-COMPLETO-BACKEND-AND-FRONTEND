@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../models/classroom_model.dart';
 import '../../../../services/classroom_service.dart';
 import '../../../../theme/app_design_system.dart';
+import '../../widgets/admin_ui.dart';
 
 const _kBorder = Color(0xFFE6EAF0);
 
@@ -91,15 +92,15 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+        AdminFeedback.snack(
+          ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+          message,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppDesignSystem.errorColor),
+        AdminFeedback.snack(AdminFeedbackType.error, 'Error: $e'),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -116,7 +117,7 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 540),
         child: Padding(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
             child: Column(
@@ -254,33 +255,17 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppDesignSystem.textSecondary,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      ),
-                      child: const Text('Cancelar'),
+                    AdminButton.ghost(
+                      label: 'Cancelar',
+                      onPressed:
+                          _isLoading ? null : () => Navigator.of(context).pop(),
                     ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
+                    const SizedBox(width: 8),
+                    AdminButton.primary(
+                      label: btnLabel,
+                      icon: Icons.check_rounded,
+                      loading: _isLoading,
                       onPressed: _isLoading ? null : _submit,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppDesignSystem.primaryColor,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: AppDesignSystem.borderRadiusMD,
-                        ),
-                      ),
-                      icon: _isLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.check_rounded, size: 18),
-                      label: Text(btnLabel),
                     ),
                   ],
                 ),
@@ -306,29 +291,10 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, size: 18),
-        border: OutlineInputBorder(
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          borderSide: const BorderSide(color: _kBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          borderSide: const BorderSide(color: _kBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          borderSide: const BorderSide(color: AppDesignSystem.primaryColor, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          borderSide: const BorderSide(color: AppDesignSystem.errorColor),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: AdminInputs.decoration(
+        label: label,
+        hint: hint,
+        prefixIcon: icon,
       ),
     );
   }
@@ -345,21 +311,9 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
       initialValue: items.contains(controller.text) ? controller.text : null,
       isExpanded: true,
       validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, size: 18),
-        border: OutlineInputBorder(borderRadius: AppDesignSystem.borderRadiusMD),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          borderSide: const BorderSide(color: _kBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: AppDesignSystem.borderRadiusMD,
-          borderSide: const BorderSide(color: AppDesignSystem.primaryColor, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: AdminInputs.decoration(
+        label: label,
+        prefixIcon: icon,
       ),
       hint: Text(hint, style: const TextStyle(fontSize: 13)),
       items: items

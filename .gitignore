@@ -78,8 +78,9 @@ asistencias_app/ios/Runner/GoogleService-Info.plist
 # Plataformas no usadas (opcional)
 asistencias_app/linux/
 asistencias_app/macos/
-asistencias_app/web/
 asistencias_app/windows/
+# Nota: asistencias_app/web/ SÍ se versiona (index.html, manifest.json, favicon,
+# icons). Los artefactos compilados quedan ignorados vía asistencias_app/build/.
 
 # ===== IDE =====
 .vscode/

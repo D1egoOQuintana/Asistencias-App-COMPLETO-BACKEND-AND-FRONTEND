@@ -5,13 +5,25 @@ import '../../../theme/app_design_system.dart';
 import '../widgets/admin_ui.dart';
 
 // ─── Palette tokens ──────────────────────────────────────────────────────────
-const _kCanvas = Color(0xFFF4F6FA);
 const _kBorder = Color(0xFFE6EAF0);
 const _kPrimary = Color(0xFF1976D2);
 const _kNavy = Color(0xFF0D1B2A);
 
 // ─── Abandoned threshold ─────────────────────────────────────────────────────
 const _kAbandonedHours = 4;
+
+// Columnas de la tabla de Sesiones (header y filas comparten esta spec).
+// Texto → izquierda; ESTADO (chip) → centrado; info → derecha.
+const List<AdminColumn> _sessionColumns = [
+  AdminColumn.flex(3, header: 'AULA'),
+  AdminColumn.flex(2, header: 'DOCENTE'),
+  AdminColumn.fixed(110, header: 'ESTADO'), // chip centrado
+  AdminColumn.fixed(72, align: Alignment.centerLeft, header: 'INICIO'),
+  AdminColumn.fixed(72, align: Alignment.centerLeft, header: 'FIN'),
+  AdminColumn.fixed(68, align: Alignment.centerLeft, header: 'DURACIÓN'),
+  AdminColumn.fixed(68, align: Alignment.centerLeft, header: 'REG.'),
+  AdminColumn.fixed(56, align: Alignment.centerRight), // info (pasivo)
+];
 
 // ─── Session status ───────────────────────────────────────────────────────────
 enum _SessionStatus { notStarted, active, finished, abandoned }
@@ -233,25 +245,29 @@ class _AdminSessionsScreenState extends State<AdminSessionsScreen>
     final width = MediaQuery.of(context).size.width;
     final isWide = width >= 600;
 
-    return Container(
-      color: _kCanvas,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              AdminUi.pagePadding(width),
-              AdminUi.pagePadding(width),
-              AdminUi.pagePadding(width),
-              0,
+    // Inter SOLO en el subárbol de Sesiones (no afecta login ni docente).
+    return DefaultTextStyle.merge(
+      style: AdminUi.fontBase,
+      child: Container(
+        color: AdminUi.surface0,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                AdminUi.pagePadding(width),
+                AdminUi.pagePadding(width),
+                AdminUi.pagePadding(width),
+                0,
+              ),
+              child: _buildHeader(context, width >= 1200),
             ),
-            child: _buildHeader(context, width >= 1200),
-          ),
-          const SizedBox(height: 16),
-          _buildToolbar(context, isWide),
-          const SizedBox(height: 16),
-          Expanded(child: _buildBody(isWide)),
-        ],
+            const SizedBox(height: 16),
+            _buildToolbar(context, isWide),
+            const SizedBox(height: 16),
+            Expanded(child: _buildBody(isWide)),
+          ],
+        ),
       ),
     );
   }
@@ -413,29 +429,10 @@ class _AdminSessionsScreenState extends State<AdminSessionsScreen>
   // ─── empty / skeleton ───────────────────────────────────────────────────────
 
   Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.event_note_rounded,
-              size: 52,
-              color: AppDesignSystem.textSecondary.withValues(alpha: 0.35)),
-          const SizedBox(height: 16),
-          const Text(
-            'Sin sesiones para este filtro',
-            style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppDesignSystem.textPrimary),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Prueba seleccionando "Todas" o cambia la fecha.',
-            style: TextStyle(
-                fontSize: 13, color: AppDesignSystem.textSecondary),
-          ),
-        ],
-      ),
+    return const AdminEmptyState(
+      icon: Icons.event_note_rounded,
+      title: 'Sin sesiones para este filtro',
+      message: 'Prueba seleccionando "Todas" o cambia la fecha.',
     );
   }
 
@@ -490,125 +487,48 @@ class _KpiStrip extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _KpiCard(
+            AdminKpiCard(
               label: 'Activas',
               value: '$active',
               color: AppDesignSystem.successColor,
               icon: Icons.play_circle_outline_rounded,
+              width: 150,
             ),
             const SizedBox(width: 12),
-            _KpiCard(
+            AdminKpiCard(
               label: 'Finalizadas',
               value: '$finished',
               color: _kPrimary,
               icon: Icons.check_circle_outline_rounded,
+              width: 150,
             ),
             const SizedBox(width: 12),
-            _KpiCard(
+            AdminKpiCard(
               label: 'Sin iniciar',
               value: '$notStarted',
               color: AppDesignSystem.textSecondary,
               icon: Icons.radio_button_unchecked_rounded,
+              width: 150,
             ),
             const SizedBox(width: 12),
-            _KpiCard(
+            AdminKpiCard(
               label: 'Abandonadas',
               value: '$abandoned',
               color: AppDesignSystem.warningColor,
               icon: Icons.warning_amber_rounded,
-              highlight: abandoned > 0,
+              alert: abandoned > 0,
+              width: 150,
             ),
             const SizedBox(width: 12),
-            _KpiCard(
+            AdminKpiCard(
               label: isToday ? 'Registros hoy' : 'Registros',
               value: '$totalAttendance',
               color: _kNavy,
               icon: Icons.people_outline_rounded,
+              width: 150,
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final IconData icon;
-  final bool highlight;
-
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.icon,
-    this.highlight = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 140,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppDesignSystem.borderRadiusMD,
-        border: Border.all(
-          color: highlight
-              ? color.withValues(alpha: 0.5)
-              : _kBorder,
-          width: highlight ? 1.5 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: AppDesignSystem.borderRadiusSM,
-                ),
-                child: Icon(icon, size: 15, color: color),
-              ),
-              if (highlight) ...[
-                const SizedBox(width: 6),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: color,
-              height: 1,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: AppDesignSystem.textSecondary,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -630,23 +550,8 @@ class _WebTable extends StatelessWidget {
         decoration: AdminUi.cardDecoration(elevated: false),
         child: Column(
           children: [
-            // Header
-            Container(
-              decoration: AdminUi.tableHeaderDecoration(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-              child: const Row(
-                children: [
-                  Expanded(flex: 3, child: _ColHeader('AULA')),
-                  Expanded(flex: 2, child: _ColHeader('DOCENTE')),
-                  SizedBox(width: 110, child: _ColHeader('ESTADO')),
-                  SizedBox(width: 72, child: _ColHeader('INICIO')),
-                  SizedBox(width: 72, child: _ColHeader('FIN')),
-                  SizedBox(width: 68, child: _ColHeader('DURACIÓN')),
-                  SizedBox(width: 68, child: _ColHeader('REG.')),
-                  SizedBox(width: 56),
-                ],
-              ),
-            ),
+            // Header (misma spec de columnas que las filas)
+            AdminTable.headerRow(_sessionColumns),
             // Rows
             Expanded(
               child: ListView.builder(
@@ -660,19 +565,6 @@ class _WebTable extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ColHeader extends StatelessWidget {
-  final String text;
-  const _ColHeader(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AdminUi.tableHeaderTextStyle,
     );
   }
 }
@@ -713,123 +605,88 @@ class _TableRowState extends State<_TableRow> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        height: 60,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: AdminTable.rowHeight,
+        padding: AdminTable.rowPadding,
         decoration: AdminUi.rowDecoration(
           hovered: _hovered,
           isLast: widget.isLast,
         ),
-        child: Row(
-          children: [
-            // Classroom
-            Expanded(
-              flex: 3,
-              child: Text(
-                r.classroomLabel,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppDesignSystem.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Teacher
-            Expanded(
-              flex: 2,
-              child: Text(
-                r.teacherName,
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppDesignSystem.textSecondary),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Status chip
-            SizedBox(
-              width: 110,
-              child: _StatusChip(status: r.status),
-            ),
-            // Start time
-            SizedBox(
-              width: 72,
-              child: Text(
-                _time(r.startTime),
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppDesignSystem.textSecondary),
-              ),
-            ),
-            // End time
-            SizedBox(
-              width: 72,
-              child: Text(
-                _time(r.endTime),
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppDesignSystem.textSecondary),
-              ),
-            ),
-            // Duration
-            SizedBox(
-              width: 68,
-              child: Text(
-                _duration(r.startTime, r.endTime),
-                style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppDesignSystem.textSecondary),
-              ),
-            ),
-            // Attendance count
-            SizedBox(
-              width: 68,
-              child: Row(
-                children: [
-                  if (r.sessionId != null) ...[
-                    Icon(Icons.people_outline_rounded,
-                        size: 13,
-                        color: r.attendanceCount > 0
-                            ? _kPrimary
-                            : AppDesignSystem.textSecondary),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    r.sessionId != null ? '${r.attendanceCount}' : '—',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: r.attendanceCount > 0
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: r.attendanceCount > 0
-                          ? AppDesignSystem.textPrimary
-                          : AppDesignSystem.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Actions
-            // TODO(session-detail): Implement per-session attendance list view.
-            // Needs: query classrooms/{classroomId}/attendance where sessionId == r.sessionId.
-            // TODO(admin-close-session): Admin close button intentionally omitted.
-            // Requires secure Cloud Function with trazabilidad (adminUid, reason, timestamp).
-            SizedBox(
-              width: 56,
-              child: Tooltip(
-                message: r.sessionId != null
-                    ? 'Detalle de sesión (próxima versión)'
-                    : 'Sin sesión iniciada',
-                child: Icon(
-                  Icons.info_outline_rounded,
-                  size: 17,
-                  color: r.sessionId != null
-                      ? AppDesignSystem.textSecondary
-                      : _kBorder,
+        child: AdminTable.dataRow(_sessionColumns, [
+          // AULA (texto)
+          Text(
+            r.classroomLabel,
+            style: AdminType.bodyStrong,
+            overflow: TextOverflow.ellipsis,
+          ),
+          // DOCENTE (texto)
+          Text(
+            r.teacherName,
+            style:
+                AdminType.bodySm.copyWith(color: AppDesignSystem.textSecondary),
+            overflow: TextOverflow.ellipsis,
+          ),
+          // ESTADO (chip centrado por la spec)
+          _StatusChip(status: r.status),
+          // INICIO
+          Text(
+            _time(r.startTime),
+            style:
+                AdminType.bodySm.copyWith(color: AppDesignSystem.textSecondary),
+          ),
+          // FIN
+          Text(
+            _time(r.endTime),
+            style:
+                AdminType.bodySm.copyWith(color: AppDesignSystem.textSecondary),
+          ),
+          // DURACIÓN
+          Text(
+            _duration(r.startTime, r.endTime),
+            style:
+                AdminType.bodySm.copyWith(color: AppDesignSystem.textSecondary),
+          ),
+          // REG. (conteo)
+          Row(
+            children: [
+              if (r.sessionId != null) ...[
+                Icon(Icons.people_outline_rounded,
+                    size: 13,
+                    color: r.attendanceCount > 0
+                        ? _kPrimary
+                        : AppDesignSystem.textSecondary),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                r.sessionId != null ? '${r.attendanceCount}' : '—',
+                style: AdminType.bodySm.copyWith(
+                  fontWeight: r.attendanceCount > 0
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: r.attendanceCount > 0
+                      ? AppDesignSystem.textPrimary
+                      : AppDesignSystem.textSecondary,
                 ),
               ),
+            ],
+          ),
+          // INFO (pasivo — sin acción real; admin solo observa)
+          // TODO(session-detail): Implement per-session attendance list view.
+          // Needs: query classrooms/{classroomId}/attendance where sessionId == r.sessionId.
+          // TODO(admin-close-session): Admin close button intentionally omitted.
+          // Requires secure Cloud Function with trazabilidad (adminUid, reason, timestamp).
+          Tooltip(
+            message: r.sessionId != null
+                ? 'Detalle de sesión (próxima versión)'
+                : 'Sin sesión iniciada',
+            child: Icon(
+              Icons.info_outline_rounded,
+              size: 17,
+              color: r.sessionId != null
+                  ? AppDesignSystem.textSecondary
+                  : _kBorder,
             ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }

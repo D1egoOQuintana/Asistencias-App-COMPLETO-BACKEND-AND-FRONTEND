@@ -57,8 +57,13 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
   @override
   void initState() {
     super.initState();
+    // detectionSpeed.normal (no noDuplicates): permite re-escanear el MISMO
+    // QR para registrar la salida sin tener que salir y reentrar a la pantalla.
+    // El doble registro se evita con el cooldown por-QR (_sameQrCooldown) más
+    // el guard _isProcessingScan; el backend (registerQrScanForDay) es
+    // idempotente: 1er escaneo = entrada, 2º = salida, 3º = no-op.
     _scannerController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
+      detectionSpeed: DetectionSpeed.normal,
       returnImage: false,
     );
     _scanLineController = AnimationController(
@@ -285,10 +290,14 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     final parsed = _tryExtractScanData(raw);
     if (parsed == null) return;
 
+    // Cooldown por-QR: ignora el MISMO código si reaparece dentro de la
+    // ventana. 3 s evita que un QR sostenido frente a la cámara registre
+    // entrada y salida en el mismo gesto, pero permite re-presentarlo luego
+    // para la salida sin salir de la pantalla.
+    const sameQrCooldown = Duration(seconds: 3);
     final now = DateTime.now();
     if (_lastScanAt != null && _lastScanRaw == raw) {
-      final diff = now.difference(_lastScanAt!).inMilliseconds;
-      if (diff < 1200) return;
+      if (now.difference(_lastScanAt!) < sameQrCooldown) return;
     }
 
     _lastScanAt = now;

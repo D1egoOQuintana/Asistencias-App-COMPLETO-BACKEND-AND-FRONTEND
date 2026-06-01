@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../models/classroom_model.dart';
 import '../../../../theme/app_design_system.dart';
+import '../../widgets/admin_ui.dart';
 
 const _kBorder = Color(0xFFE6EAF0);
 const _kCanvas = Color(0xFFF4F6FA);
@@ -92,7 +93,7 @@ class _ScheduleConfigDialogState extends State<ScheduleConfigDialog> {
     final error = _validate();
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: AppDesignSystem.errorColor),
+        AdminFeedback.snack(AdminFeedbackType.warning, error),
       );
       return;
     }
@@ -125,15 +126,15 @@ class _ScheduleConfigDialogState extends State<ScheduleConfigDialog> {
       if (!mounted) return;
       nav.pop();
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Horario guardado correctamente'),
-          backgroundColor: AppDesignSystem.successColor,
+        AdminFeedback.snack(
+          AdminFeedbackType.success,
+          'Horario guardado correctamente',
         ),
       );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppDesignSystem.errorColor),
+        AdminFeedback.snack(AdminFeedbackType.error, 'Error: $e'),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -267,34 +268,17 @@ class _ScheduleConfigDialogState extends State<ScheduleConfigDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
-                        onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppDesignSystem.textSecondary,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                        ),
-                        child: const Text('Cancelar'),
+                      AdminButton.ghost(
+                        label: 'Cancelar',
+                        onPressed:
+                            _isSaving ? null : () => Navigator.of(context).pop(),
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
+                      const SizedBox(width: 8),
+                      AdminButton.primary(
+                        label: 'Guardar horario',
+                        icon: Icons.save_rounded,
+                        loading: _isSaving,
                         onPressed: _isSaving ? null : _save,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppDesignSystem.successColor,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: AppDesignSystem.borderRadiusMD),
-                        ),
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.save_rounded, size: 18),
-                        label: const Text('Guardar horario'),
                       ),
                     ],
                   ),

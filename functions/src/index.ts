@@ -1013,6 +1013,8 @@ export {
   sendTelegramAttendanceEventNotification,
   handleTelegramWebhook,
   createTelegramActivationLink,
+  notifyClassroomAbsences,
+  notifyAbsencesScheduled,
 } from './telegram';
 
 export { syncClassroomAttendanceToRoot } from './attendance-sync';

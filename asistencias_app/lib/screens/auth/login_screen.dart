@@ -5,7 +5,12 @@ import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// Si se indica, la pantalla entra directamente al formulario de ese rol y
+  /// omite el selector "Docente / Administrador" (se usa en Flutter Web para
+  /// el acceso administrador). En móvil se deja en `null` → flujo actual intacto.
+  final UserRole? forcedRole;
+
+  const LoginScreen({super.key, this.forcedRole});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -19,6 +24,13 @@ class _LoginScreenState extends State<LoginScreen> {
   static const Color _darkText = Color(0xFF0B1F3B);
 
   UserRole? _selectedRole;
+
+  @override
+  void initState() {
+    super.initState();
+    // Web/admin: arranca directo en el formulario, sin selector de portal.
+    _selectedRole = widget.forcedRole;
+  }
 
   bool get _showRoleSelector => _selectedRole == null;
 
@@ -241,19 +253,23 @@ class _LoginScreenState extends State<LoginScreen> {
     return Column(
       key: ValueKey('form-${role.value}'),
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _backToSelector,
-            icon: const Icon(Icons.arrow_back_rounded),
-            label: const Text('Volver a selección'),
-            style: TextButton.styleFrom(
-              foregroundColor: _brandBlue,
-              textStyle: GoogleFonts.workSans(fontWeight: FontWeight.w700),
+        // En web/admin (forcedRole) no hay selector al que volver, por eso se
+        // omite el botón. En móvil (forcedRole == null) se mantiene igual.
+        if (widget.forcedRole == null) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _backToSelector,
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('Volver a selección'),
+              style: TextButton.styleFrom(
+                foregroundColor: _brandBlue,
+                textStyle: GoogleFonts.workSans(fontWeight: FontWeight.w700),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 8),
+        ],
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),

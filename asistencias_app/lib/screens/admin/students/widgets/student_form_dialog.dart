@@ -5,6 +5,7 @@ import '../../../../models/student_model.dart';
 import '../../../../services/student_service.dart';
 import '../../../../services/classroom_service.dart';
 import '../../../../theme/app_design_system.dart';
+import '../../widgets/admin_ui.dart';
 
 const _kBorder = Color(0xFFE6EAF0);
 const _kPrimary = Color(0xFF1976D2);
@@ -79,10 +80,9 @@ class _StudentFormDialogState extends State<StudentFormDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedClassroomId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Selecciona un aula'),
-        backgroundColor: AppDesignSystem.errorColor,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        AdminFeedback.snack(AdminFeedbackType.warning, 'Selecciona un aula'),
+      );
       return;
     }
 
@@ -123,10 +123,9 @@ class _StudentFormDialogState extends State<StudentFormDialog> {
 
     if (!mounted) return;
     nav.pop();
-    messenger.showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor:
-          ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+    messenger.showSnackBar(AdminFeedback.snack(
+      ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+      message,
     ));
   }
 
@@ -280,35 +279,18 @@ class _StudentFormDialogState extends State<StudentFormDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
+                      AdminButton.ghost(
+                        label: 'Cancelar',
                         onPressed:
                             _saving ? null : () => Navigator.of(context).pop(),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppDesignSystem.textSecondary,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                        ),
-                        child: const Text('Cancelar'),
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
+                      const SizedBox(width: 8),
+                      AdminButton.primary(
+                        label:
+                            _isEditing ? 'Guardar cambios' : 'Crear estudiante',
+                        icon: Icons.check_rounded,
+                        loading: _saving,
                         onPressed: _saving ? null : _submit,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _kPrimary,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: AppDesignSystem.borderRadiusMD),
-                        ),
-                        icon: _saving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.check_rounded, size: 18),
-                        label: Text(_isEditing ? 'Guardar cambios' : 'Crear estudiante'),
                       ),
                     ],
                   ),
@@ -387,22 +369,9 @@ class _StudentFormDialogState extends State<StudentFormDialog> {
         return DropdownButtonFormField<String>(
           initialValue: _selectedClassroomId,
           isExpanded: true,
-          decoration: InputDecoration(
-            labelText: 'Aula *',
-            prefixIcon: const Icon(Icons.class_rounded, size: 18),
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            border: OutlineInputBorder(
-                borderRadius: AppDesignSystem.borderRadiusMD,
-                borderSide: const BorderSide(color: _kBorder)),
-            enabledBorder: OutlineInputBorder(
-                borderRadius: AppDesignSystem.borderRadiusMD,
-                borderSide: const BorderSide(color: _kBorder)),
-            focusedBorder: OutlineInputBorder(
-                borderRadius: AppDesignSystem.borderRadiusMD,
-                borderSide: const BorderSide(color: _kPrimary, width: 2)),
+          decoration: AdminInputs.decoration(
+            label: 'Aula *',
+            prefixIcon: Icons.class_rounded,
           ),
           hint: const Text('Selecciona un aula',
               style: TextStyle(fontSize: 13)),
@@ -433,27 +402,10 @@ class _StudentFormDialogState extends State<StudentFormDialog> {
       keyboardType: keyboardType,
       inputFormatters: formatters,
       validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, size: 18),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide: const BorderSide(color: _kBorder)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide: const BorderSide(color: _kBorder)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide: const BorderSide(color: _kPrimary, width: 2)),
-        errorBorder: OutlineInputBorder(
-            borderRadius: AppDesignSystem.borderRadiusMD,
-            borderSide:
-                const BorderSide(color: AppDesignSystem.errorColor)),
+      decoration: AdminInputs.decoration(
+        label: label,
+        hint: hint,
+        prefixIcon: icon,
       ),
     );
   }

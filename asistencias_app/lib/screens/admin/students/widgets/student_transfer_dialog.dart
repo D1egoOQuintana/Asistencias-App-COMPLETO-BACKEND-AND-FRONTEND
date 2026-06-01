@@ -4,9 +4,9 @@ import '../../../../models/student_model.dart';
 import '../../../../services/student_service.dart';
 import '../../../../services/classroom_service.dart';
 import '../../../../theme/app_design_system.dart';
+import '../../widgets/admin_ui.dart';
 
 const _kBorder = Color(0xFFE6EAF0);
-const _kPrimary = Color(0xFF1976D2);
 
 /// Diálogo de transferencia de estudiante entre aulas.
 /// Usa [StudentService.transferStudent] que solo actualiza classroomId + updatedAt.
@@ -38,12 +38,11 @@ class _StudentTransferDialogState extends State<StudentTransferDialog> {
 
     if (!mounted) return;
     nav.pop();
-    messenger.showSnackBar(SnackBar(
-      content: Text(ok
+    messenger.showSnackBar(AdminFeedback.snack(
+      ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+      ok
           ? 'Estudiante transferido correctamente'
-          : 'No se pudo transferir el estudiante'),
-      backgroundColor:
-          ok ? AppDesignSystem.successColor : AppDesignSystem.errorColor,
+          : 'No se pudo transferir el estudiante',
     ));
   }
 
@@ -53,7 +52,7 @@ class _StudentTransferDialogState extends State<StudentTransferDialog> {
       shape: RoundedRectangleBorder(
           borderRadius: AppDesignSystem.borderRadiusLG),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -186,23 +185,9 @@ class _StudentTransferDialogState extends State<StudentTransferDialog> {
                   return DropdownButtonFormField<String>(
                     initialValue: _targetClassroomId,
                     isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Aula destino',
-                      prefixIcon: const Icon(Icons.class_rounded, size: 18),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 14),
-                      border: OutlineInputBorder(
-                          borderRadius: AppDesignSystem.borderRadiusMD,
-                          borderSide: const BorderSide(color: _kBorder)),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: AppDesignSystem.borderRadiusMD,
-                          borderSide: const BorderSide(color: _kBorder)),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: AppDesignSystem.borderRadiusMD,
-                          borderSide:
-                              const BorderSide(color: _kPrimary, width: 2)),
+                    decoration: AdminInputs.decoration(
+                      label: 'Aula destino',
+                      prefixIcon: Icons.class_rounded,
                     ),
                     hint: const Text('Selecciona el aula destino',
                         style: TextStyle(fontSize: 13)),
@@ -218,35 +203,19 @@ class _StudentTransferDialogState extends State<StudentTransferDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
+                  AdminButton.ghost(
+                    label: 'Cancelar',
                     onPressed:
                         _saving ? null : () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                        foregroundColor: AppDesignSystem.textSecondary,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12)),
-                    child: const Text('Cancelar'),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed:
-                        (_saving || _targetClassroomId == null) ? null : _transfer,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppDesignSystem.warningColor,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: AppDesignSystem.borderRadiusMD),
-                    ),
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.swap_horiz_rounded, size: 18),
-                    label: const Text('Transferir'),
+                  const SizedBox(width: 8),
+                  AdminButton.primary(
+                    label: 'Transferir',
+                    icon: Icons.swap_horiz_rounded,
+                    loading: _saving,
+                    onPressed: (_saving || _targetClassroomId == null)
+                        ? null
+                        : _transfer,
                   ),
                 ],
               ),
