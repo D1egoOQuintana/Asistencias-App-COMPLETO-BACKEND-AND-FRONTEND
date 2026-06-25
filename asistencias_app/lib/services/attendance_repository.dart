@@ -209,4 +209,59 @@ class AttendanceRepository {
       );
     });
   }
+
+  String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// Marca como AUSENTES a los estudiantes activos que NO tienen documento de
+  /// asistencia para [day]. Persiste en la ruta real
+  /// `classrooms/{classroomId}/attendance/{studentId}_{dateKey}` con docId
+  /// determinístico, por lo que es idempotente: correrlo dos veces no duplica.
+  ///
+  /// No sobrescribe registros existentes (presente/tarde/ausente): se filtra
+  /// por los documentos ya presentes ese día antes de escribir. Devuelve cuántos
+  /// ausentes nuevos se crearon.
+  ///
+  /// Lógica de persistencia portada de `attendance_service.markAbsentStudents`,
+  /// corrigiendo la ruta (subcolección en vez de la colección raíz `attendance`),
+  /// el `date` (string `dateKey` en vez de Timestamp) y el docId (determinístico
+  /// en vez de auto-id, que sí permitía duplicados).
+  Future<int> markAbsentStudentsForDay({
+    required String classroomId,
+    required List<String> activeStudentIds,
+    Map<String, String>? studentNames,
+    DateTime? day,
+  }) async {
+    final now = day ?? DateTime.now();
+    final dateKey = _dateKey(now);
+
+    // Asistencias ya registradas hoy (cualquier estado) → no se tocan.
+    final existing = await _classroomAttendance(classroomId)
+        .where('date', isEqualTo: dateKey)
+        .get();
+    final recorded = existing.docs
+        .map((d) => (d.data()['studentId'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final batch = _db.batch();
+    int created = 0;
+    for (final studentId in activeStudentIds) {
+      if (studentId.isEmpty || recorded.contains(studentId)) continue;
+      final ref = _classroomAttendance(classroomId).doc('${studentId}_$dateKey');
+      batch.set(ref, {
+        'classroomId': classroomId,
+        'studentId': studentId,
+        'status': _legacyStatus(AttendanceStatus.ausente),
+        'timestamp': FieldValue.serverTimestamp(),
+        'date': dateKey,
+        'source': 'auto_absent',
+        if (studentNames != null && studentNames[studentId] != null)
+          'studentName': studentNames[studentId],
+      });
+      created++;
+    }
+    if (created > 0) await batch.commit();
+    return created;
+  }
 }
