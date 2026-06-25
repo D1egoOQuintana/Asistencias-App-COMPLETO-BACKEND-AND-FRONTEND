@@ -7,8 +7,11 @@ const {onRequest} = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const axios = require('axios');
 
-// TOKEN del bot de Telegram
-const BOT_TOKEN = '8305613209:AAFxld-nM5Qwe5Rs1TTDEbyXHOdu2Vg_NQw';
+// TOKEN del bot de Telegram. Obligatorio vía variable de entorno (sin fallback).
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+if (!BOT_TOKEN) {
+  throw new Error('TELEGRAM_BOT_TOKEN no está definido en el entorno.');
+}
 
 // Función que se ejecuta automáticamente cuando se crea una asistencia
 const sendTelegramNotification = onDocumentCreated('attendance/{docId}', async (event) => {

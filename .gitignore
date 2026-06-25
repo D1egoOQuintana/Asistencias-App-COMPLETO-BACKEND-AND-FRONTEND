@@ -43,6 +43,7 @@ asistencias_app/.packages
 asistencias_app/.pub-cache/
 asistencias_app/.pub/
 asistencias_app/build/
+asistencias_app/android/build/
 asistencias_app/.metadata
 
 # Android
@@ -57,6 +58,9 @@ asistencias_app/android/key.properties
 asistencias_app/android/*.jks
 asistencias_app/android/*.keystore
 asistencias_app/android/app/google-services.json
+
+# CodeGraph (índice/caché local, no versionar)
+.codegraph/
 
 # iOS
 asistencias_app/ios/**/*.mode1v3

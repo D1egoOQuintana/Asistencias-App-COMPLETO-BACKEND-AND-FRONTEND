@@ -257,6 +257,24 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     return null;
   }
 
+  /// Horario del aula para el día de [date] (o null si no hay clase hoy).
+  ClassSchedule? _scheduleForToday(ClassroomModel classroom, DateTime date) {
+    final schedule = classroom.schedule;
+    if (schedule == null) return null;
+    const keys = {
+      1: 'monday',
+      2: 'tuesday',
+      3: 'wednesday',
+      4: 'thursday',
+      5: 'friday',
+      6: 'saturday',
+      7: 'sunday',
+    };
+    final key = keys[date.weekday];
+    if (key == null) return null;
+    return schedule[key];
+  }
+
   Future<void> _openAttendanceCorrections() async {
     final classroom = _selectedClassroomModel();
     if (classroom == null) {
@@ -321,7 +339,45 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
           ? student!.fullName
           : 'Estudiante';
 
-      final status = AttendanceStatus.presente;
+      // Estado según horario del aula: presente / tarde, o bloqueo si el
+      // escaneo cae fuera del horario de clase. Si el aula no tiene horario
+      // configurado, se conserva el comportamiento previo (presente).
+      final classroom = _selectedClassroomModel();
+      final schedule = classroom == null
+          ? null
+          : _scheduleForToday(classroom, now);
+      final timing = evaluateAttendanceTiming(
+        maxLateTime: schedule?.maxLateTime,
+        endTime: schedule?.endTime,
+        now: now,
+      );
+
+      if (timing == AttendanceTiming.outsideSchedule) {
+        if (!mounted) return;
+        setState(() {
+          _lastScanMessage = 'Fuera de horario: $studentName';
+          _lastScanColor = const Color(0xFFFFB74D);
+          _lastScannedStudent = _ScannedStudentCardData(
+            fullName: studentName,
+            studentId: studentId,
+            dni: student?.dni ?? parsed.dni ?? 'No disponible',
+            parentEmail: student?.parentEmail ?? 'No registrado',
+            parentPhone: student?.parentPhone ?? 'No registrado',
+            classroomLabel: _classroomLabelById(_selectedClassroomId),
+            scannedAt: now,
+            statusLabel: 'FUERA DE HORARIO',
+            success: false,
+            message: schedule != null
+                ? 'La clase es de ${schedule.startTime} a ${schedule.endTime}. No se registró asistencia.'
+                : 'Fuera del horario de clase. No se registró asistencia.',
+          );
+        });
+        return; // el bloque finally restablece _isProcessingScan.
+      }
+
+      final status = timing == AttendanceTiming.late
+          ? AttendanceStatus.tarde
+          : AttendanceStatus.presente;
 
       if (!mounted) return;
 

@@ -12,8 +12,13 @@ import axios from 'axios';
 // Usar la instancia de Firebase Admin ya inicializada
 const db = getFirestore();
 
-// TOKEN del bot de Telegram
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8305613209:AAFxld-nM5Qwe5Rs1TTDEbyXHOdu2Vg_NQw';
+// TOKEN del bot de Telegram. Obligatorio vía variable de entorno (sin fallback).
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+if (!BOT_TOKEN) {
+  throw new Error(
+    'TELEGRAM_BOT_TOKEN no está definido. Configúralo como variable de entorno/secreto antes de desplegar.'
+  );
+}
 const BOT_USERNAME_FALLBACK = process.env.TELEGRAM_BOT_USERNAME || 'mi_bot_asistencia';
 let cachedBotUsername: string | null = null;
 

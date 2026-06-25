@@ -3,6 +3,42 @@ import '../models/attendance_models.dart';
 
 enum QrScanResultType { entryRegistered, exitRegistered, exitAlreadyRegistered }
 
+/// Resultado de evaluar la hora del escaneo contra el horario del aula.
+/// - [present]: a tiempo (hasta maxLateTime).
+/// - [late]: después de maxLateTime pero aún dentro del horario.
+/// - [outsideSchedule]: después de endTime → no se debe registrar.
+/// - [noSchedule]: el aula no tiene horario válido para hoy → el llamador
+///   decide (en el flujo vivo se trata como [present] para no romper aulas
+///   sin horario configurado).
+enum AttendanceTiming { present, late, outsideSchedule, noSchedule }
+
+/// Combina una fecha con un string 'HH:mm'. Devuelve null si no es parseable.
+DateTime? parseHhmmOnDate(DateTime day, String? hhmm) {
+  if (hhmm == null) return null;
+  final parts = hhmm.split(':');
+  if (parts.length < 2) return null;
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  if (h == null || m == null) return null;
+  return DateTime(day.year, day.month, day.day, h, m);
+}
+
+/// Decide el estado de asistencia según el horario del aula y la hora del
+/// escaneo. Lógica portada de `quick_qr_attendance_screen.dart` (pantalla
+/// muerta) a una función pura y testeable.
+AttendanceTiming evaluateAttendanceTiming({
+  required String? maxLateTime,
+  required String? endTime,
+  required DateTime now,
+}) {
+  final maxLate = parseHhmmOnDate(now, maxLateTime);
+  final end = parseHhmmOnDate(now, endTime);
+  if (maxLate == null || end == null) return AttendanceTiming.noSchedule;
+  if (now.isAfter(end)) return AttendanceTiming.outsideSchedule;
+  if (now.isAfter(maxLate)) return AttendanceTiming.late;
+  return AttendanceTiming.present;
+}
+
 class QrScanResult {
   final QrScanResultType type;
   final AttendanceStatus status;
