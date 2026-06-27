@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/student_model.dart';
+import '../../../services/attendance_repository.dart';
 
 /// Hoja para notificar a apoderados de estudiantes AUSENTES (no escanearon QR)
 /// en un aula y fecha dados.
@@ -34,6 +35,7 @@ class _AbsenteesNotifierSheetState extends State<AbsenteesNotifierSheet> {
   String? _error;
   List<StudentModel> _absentees = const [];
   int _totalStudents = 0;
+  int _persistedAbsent = 0;
   _SendResult? _result;
 
   static const _navy = Color(0xFF0F2747);
@@ -117,6 +119,35 @@ class _AbsenteesNotifierSheetState extends State<AbsenteesNotifierSheet> {
       _result = null;
     });
 
+    // 1) Persistir los ausentes en la ruta real ANTES de notificar.
+    //    markAbsentStudentsForDay es idempotente y NO sobrescribe registros
+    //    existentes de presente/tarde/ausente (filtra por documentos del día).
+    int createdAbsent = 0;
+    try {
+      final repo = AttendanceRepository();
+      final absentIds =
+          _absentees.where((s) => s.id != null).map((s) => s.id!).toList();
+      final names = {
+        for (final s in _absentees)
+          if (s.id != null) s.id!: s.fullName,
+      };
+      createdAbsent = await repo.markAbsentStudentsForDay(
+        classroomId: widget.classroomId,
+        activeStudentIds: absentIds,
+        studentNames: names,
+        day: widget.day,
+      );
+    } catch (e) {
+      // No bloquear la notificación si falla la persistencia; avisar y seguir.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudieron registrar los ausentes: $e'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+    }
+
+    // 2) Notificar por Telegram.
     try {
       final callable = FirebaseFunctions.instance
           .httpsCallable('notifyClassroomAbsences');
@@ -129,6 +160,7 @@ class _AbsenteesNotifierSheetState extends State<AbsenteesNotifierSheet> {
       if (!mounted) return;
       setState(() {
         _sending = false;
+        _persistedAbsent = createdAbsent;
         _result = _SendResult(
           notified: (data['notified'] ?? 0) as int,
           skippedNoChat: (data['skippedNoChat'] ?? 0) as int,
@@ -352,6 +384,18 @@ class _AbsenteesNotifierSheetState extends State<AbsenteesNotifierSheet> {
               ),
             ],
           ),
+          if (_persistedAbsent > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$_persistedAbsent ausente${_persistedAbsent != 1 ? 's' : ''} registrado${_persistedAbsent != 1 ? 's' : ''} en el sistema',
+              style: const TextStyle(
+                color: Color(0xFF3B5B49),
+                fontFamily: 'WorkSans',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           if (r.skippedNoChat > 0 || r.alreadyNotified > 0) ...[
             const SizedBox(height: 4),
             Text(
