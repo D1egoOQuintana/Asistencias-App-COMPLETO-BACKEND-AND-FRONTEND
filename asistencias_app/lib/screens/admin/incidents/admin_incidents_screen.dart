@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/classroom_model.dart';
 import '../../../models/student_model.dart';
-import '../../../services/admin_service_final.dart';
+import '../../../services/admin_service.dart';
 import '../../../services/classroom_service.dart';
 import '../../../services/student_service.dart';
 import '../../../theme/app_design_system.dart';

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../services/admin_service_final.dart';
-import '../../../services/admin_service.dart' as http_service;
+import '../../../services/admin_service.dart';
 import '../../../theme/app_design_system.dart';
 import '../widgets/admin_ui.dart';
 
@@ -153,7 +152,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
 
   Future<void> _forcePasswordReset(String uid) async {
     final result =
-        await http_service.AdminService.forcePasswordChange(teacherUid: uid);
+        await AdminService.forcePasswordChange(teacherUid: uid);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(AdminFeedback.snack(
         result['success'] == true
@@ -933,7 +932,7 @@ class _MobileList extends StatelessWidget {
 /// classroomCount is needed to surface the alert when an inactive teacher
 /// still has classrooms assigned — those aulas appear "sin docente" to students.
 // TODO(phone): UserModel and Firestore user docs do not have a 'phone' field.
-// If the institution needs it, add 'phone' to Firestore user doc via admin_service_final
+// If the institution needs it, add 'phone' to Firestore user doc via admin_service
 // and surface it here as a third line in the teacher card / table row detail.
 class _StatusChip extends StatelessWidget {
   final bool isActive;
