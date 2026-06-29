@@ -28,11 +28,14 @@ functions/lib/
 
 # Environment variables
 .env
+.env.*
 .env.local
 .env.production
 functions/.env
+functions/.env.*
 functions/.env.local
 functions/.env.production
+!functions/.env.example
 
 # ===== FLUTTER APP =====
 # Dart/Flutter cache

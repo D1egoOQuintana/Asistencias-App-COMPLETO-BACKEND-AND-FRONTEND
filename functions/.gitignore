@@ -1,5 +1,5 @@
 node_modules/
 *.local
-.env.production
-.env.development
-.env.asistencias
+.env
+.env.*
+!.env.example
