@@ -173,7 +173,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
   }
 
-  void _showEdit(String uid, String currentName, String phone, String subject) {
+  void _showEdit(String uid, String currentName, String phone, String subject,
+      bool isAuxiliar) {
     showDialog(
       context: context,
       builder: (_) => _TeacherEditDialog(
@@ -181,6 +182,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
         currentName: currentName,
         currentPhone: phone,
         currentSubject: subject,
+        currentIsAuxiliar: isAuxiliar,
       ),
     );
   }
@@ -408,8 +410,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     docs: pageDocs,
                     classroomCount: classroomCount,
                     displayName: _displayName,
-                    onEdit: (uid, name, phone, subject) =>
-                        _showEdit(uid, name, phone, subject),
+                    onEdit: (uid, name, phone, subject, isAuxiliar) =>
+                        _showEdit(uid, name, phone, subject, isAuxiliar),
                     onToggle: (uid, name, active) =>
                         _confirmToggle(uid, name, active),
                     onForceReset: (uid, name) => _confirmForceReset(uid, name),
@@ -419,8 +421,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     classroomCount: classroomCount,
                     displayName: _displayName,
                     initial: _initial,
-                    onEdit: (uid, name, phone, subject) =>
-                        _showEdit(uid, name, phone, subject),
+                    onEdit: (uid, name, phone, subject, isAuxiliar) =>
+                        _showEdit(uid, name, phone, subject, isAuxiliar),
                     onToggle: (uid, name, active) =>
                         _confirmToggle(uid, name, active),
                     onForceReset: (uid, name) => _confirmForceReset(uid, name),
@@ -552,7 +554,8 @@ class _WebTable extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final Map<String, int> classroomCount;
   final String Function(Map<String, dynamic>) displayName;
-  final void Function(String uid, String name, String phone, String subject) onEdit;
+  final void Function(String uid, String name, String phone, String subject,
+      bool isAuxiliar) onEdit;
   final void Function(String uid, String name, bool active) onToggle;
   final void Function(String uid, String name) onForceReset;
 
@@ -589,6 +592,7 @@ class _WebTable extends StatelessWidget {
                   final count = classroomCount[uid] ?? 0;
                   final phone = (d['phone'] ?? '').toString().trim();
                   final subject = (d['subject'] ?? '').toString().trim();
+                  final isAuxiliar = d['isAuxiliar'] as bool? ?? false;
                   return _TableRow(
                     uid: uid,
                     name: name,
@@ -597,6 +601,7 @@ class _WebTable extends StatelessWidget {
                     classroomCount: count,
                     phone: phone,
                     subject: subject,
+                    isAuxiliar: isAuxiliar,
                     onEdit: onEdit,
                     onToggle: onToggle,
                     onForceReset: onForceReset,
@@ -620,7 +625,9 @@ class _TableRow extends StatefulWidget {
   final int classroomCount;
   final String phone;
   final String subject;
-  final void Function(String uid, String name, String phone, String subject) onEdit;
+  final bool isAuxiliar;
+  final void Function(String uid, String name, String phone, String subject,
+      bool isAuxiliar) onEdit;
   final void Function(String uid, String name, bool active) onToggle;
   final void Function(String uid, String name) onForceReset;
   final bool isLast;
@@ -633,6 +640,7 @@ class _TableRow extends StatefulWidget {
     required this.classroomCount,
     required this.phone,
     required this.subject,
+    required this.isAuxiliar,
     required this.onEdit,
     required this.onToggle,
     required this.onForceReset,
@@ -688,10 +696,20 @@ class _TableRowState extends State<_TableRow> {
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      widget.name,
-                      style: AdminType.bodyStrong,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.name,
+                            style: AdminType.bodyStrong,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (widget.isAuxiliar) ...[
+                          const SizedBox(width: 6),
+                          const _RoleBadge(label: 'Auxiliar'),
+                        ],
+                      ],
                     ),
                     if (widget.subject.isNotEmpty)
                       Text(
@@ -726,8 +744,8 @@ class _TableRowState extends State<_TableRow> {
               AdminActionIcon(
                 icon: Icons.edit_outlined,
                 tooltip: 'Editar',
-                onTap: () => widget.onEdit(
-                    widget.uid, widget.name, widget.phone, widget.subject),
+                onTap: () => widget.onEdit(widget.uid, widget.name,
+                    widget.phone, widget.subject, widget.isAuxiliar),
               ),
               _RowMenu(
                 isActive: widget.isActive,
@@ -830,7 +848,8 @@ class _MobileList extends StatelessWidget {
   final Map<String, int> classroomCount;
   final String Function(Map<String, dynamic>) displayName;
   final String Function(String) initial;
-  final void Function(String uid, String name, String phone, String subject) onEdit;
+  final void Function(String uid, String name, String phone, String subject,
+      bool isAuxiliar) onEdit;
   final void Function(String uid, String name, bool active) onToggle;
   final void Function(String uid, String name) onForceReset;
 
@@ -859,6 +878,7 @@ class _MobileList extends StatelessWidget {
         final count = classroomCount[uid] ?? 0;
         final phone = (d['phone'] ?? '').toString().trim();
         final subject = (d['subject'] ?? '').toString().trim();
+        final isAuxiliar = d['isAuxiliar'] as bool? ?? false;
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -895,11 +915,21 @@ class _MobileList extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(name,
-                              style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppDesignSystem.textPrimary)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(name,
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppDesignSystem.textPrimary)),
+                              ),
+                              if (isAuxiliar) ...[
+                                const SizedBox(width: 6),
+                                const _RoleBadge(label: 'Auxiliar'),
+                              ],
+                            ],
+                          ),
                           Text(email,
                               style: const TextStyle(
                                   fontSize: 12,
@@ -938,7 +968,8 @@ class _MobileList extends StatelessWidget {
                       icon: const Icon(Icons.edit_outlined, size: 15),
                       label: const Text('Editar',
                           style: TextStyle(fontSize: 12)),
-                      onPressed: () => onEdit(uid, name, phone, subject),
+                      onPressed: () =>
+                          onEdit(uid, name, phone, subject, isAuxiliar),
                     ),
                     TextButton.icon(
                       style: TextButton.styleFrom(
@@ -1069,6 +1100,7 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
   final _passCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _subjectCtrl = TextEditingController();
+  bool _isAuxiliar = false;
   bool _obscure = true;
   bool _saving = false;
 
@@ -1095,6 +1127,7 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
       temporaryPassword: _passCtrl.text,
       phone: _phoneCtrl.text.trim(),
       subject: _subjectCtrl.text.trim(),
+      isAuxiliar: _isAuxiliar,
     );
 
     if (!mounted) return;
@@ -1232,7 +1265,14 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
                   hint: 'Ej: Matemáticas',
                   icon: Icons.school_outlined,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+
+                // Es auxiliar
+                _AuxiliarSwitch(
+                  value: _isAuxiliar,
+                  onChanged: (v) => setState(() => _isAuxiliar = v),
+                ),
+                const SizedBox(height: 16),
 
                 // Actions
                 Row(
@@ -1290,12 +1330,14 @@ class _TeacherEditDialog extends StatefulWidget {
   final String currentName;
   final String currentPhone;
   final String currentSubject;
+  final bool currentIsAuxiliar;
 
   const _TeacherEditDialog({
     required this.uid,
     required this.currentName,
     this.currentPhone = '',
     this.currentSubject = '',
+    this.currentIsAuxiliar = false,
   });
 
   @override
@@ -1307,6 +1349,7 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _subjectCtrl;
+  late bool _isAuxiliar;
   bool _saving = false;
 
   @override
@@ -1315,6 +1358,7 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
     _nameCtrl = TextEditingController(text: widget.currentName);
     _phoneCtrl = TextEditingController(text: widget.currentPhone);
     _subjectCtrl = TextEditingController(text: widget.currentSubject);
+    _isAuxiliar = widget.currentIsAuxiliar;
   }
 
   @override
@@ -1337,6 +1381,7 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
       fullName: _nameCtrl.text.trim(),
       phone: _phoneCtrl.text.trim(),
       subject: _subjectCtrl.text.trim(),
+      isAuxiliar: _isAuxiliar,
     );
 
     if (!mounted) return;
@@ -1425,7 +1470,12 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
                     prefixIcon: Icons.school_outlined,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+                _AuxiliarSwitch(
+                  value: _isAuxiliar,
+                  onChanged: (v) => setState(() => _isAuxiliar = v),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -1447,6 +1497,86 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUXILIAR helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Badge compacto que etiqueta a un docente como Auxiliar en la lista.
+class _RoleBadge extends StatelessWidget {
+  final String label;
+  const _RoleBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppDesignSystem.infoColor.withValues(alpha: 0.12),
+        borderRadius: AppDesignSystem.borderRadiusFull,
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: AppDesignSystem.infoColor,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
+/// Switch + descripción para marcar al docente como Auxiliar.
+/// Mantiene role='docente'; este flag solo discrimina en UI/listados.
+class _AuxiliarSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _AuxiliarSwitch({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppDesignSystem.infoColor.withValues(alpha: 0.04),
+        borderRadius: AppDesignSystem.borderRadiusMD,
+        border: Border.all(
+          color: AppDesignSystem.infoColor.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.support_agent_rounded,
+              size: 18, color: AppDesignSystem.infoColor),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Auxiliar de educación',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppDesignSystem.textPrimary,
+                  ),
+                ),
+                Text(
+                  'Apoya el control de asistencia, no es tutor de aula.',
+                  style: TextStyle(
+                      fontSize: 11, color: AppDesignSystem.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(value: value, onChanged: onChanged),
+        ],
       ),
     );
   }

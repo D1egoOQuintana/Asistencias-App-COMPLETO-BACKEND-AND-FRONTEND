@@ -35,15 +35,20 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
   static const _grades = ['1', '2', '3', '4', '5', '6'];
   static const _sections = ['A', 'B', 'C', 'D', 'E'];
 
-  // Docente principal (obligatorio). En edición arranca con el actual.
+  // Tutor (obligatorio) — equivale a teacherUid principal.
   String? _teacherUid;
   String? _teacherName;
-  // Docentes adicionales (polidocente). Excluye al principal.
-  // Set para asegurar unicidad sin esfuerzo.
-  final Set<String> _extraTeacherUids = <String>{};
-  // Cache uid → nombre para chips, alimentada por el stream.
+  // Auxiliar (opcional) — se persiste como 2º miembro de teacherUids.
+  String? _auxiliarUid;
+  // Cache uid → nombre, alimentada por el stream (lo que ya cargó).
   final Map<String, String> _teacherNameByUid = <String, String>{};
+  // Cache uid → isAuxiliar, para filtrar tutores vs auxiliares sin
+  // re-suscribirse al stream.
+  final Map<String, bool> _teacherIsAuxByUid = <String, bool>{};
   late final Stream<QuerySnapshot> _teachersStream;
+  // Aulas legacy con >2 teacherUids: registramos los descartados (más allá
+  // del primer auxiliar) para mostrar una nota una sola vez.
+  final List<String> _legacyDroppedUids = <String>[];
 
   @override
   void initState() {
@@ -59,9 +64,16 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
     _teacherName = c?.teacherName;
     // Compatibilidad: aulas antiguas pueden no traer teacherUids;
     // effectiveTeacherUids del modelo ya hace fallback a [teacherUid].
+    // En el nuevo modelo solo hay UN auxiliar; tomamos el primer uid distinto
+    // del tutor. Los demás se reportan como deuda legacy.
     if (c != null) {
       for (final uid in c.effectiveTeacherUids) {
-        if (uid != _teacherUid) _extraTeacherUids.add(uid);
+        if (uid == _teacherUid) continue;
+        if (_auxiliarUid == null) {
+          _auxiliarUid = uid;
+        } else {
+          _legacyDroppedUids.add(uid);
+        }
       }
     }
     _teachersStream = TeacherService.getTeachersStream();
@@ -125,7 +137,16 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         AdminFeedback.snack(
           AdminFeedbackType.error,
-          'Selecciona un docente principal',
+          'Selecciona un tutor',
+        ),
+      );
+      return;
+    }
+    if (_auxiliarUid != null && _auxiliarUid == _teacherUid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        AdminFeedback.snack(
+          AdminFeedbackType.error,
+          'El auxiliar debe ser distinto al tutor',
         ),
       );
       return;
@@ -137,13 +158,48 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
     final section = _section.text.trim().toUpperCase();
     final capacity = int.parse(_capacity.text.trim());
 
+    // Validación 1 tutor = 1 aula activa.
+    // Solo se consulta cuando el tutor cambió (o al crear). Al editar
+    // un aula sin tocar el tutor se omite el round-trip y la validación.
+    final tutorChanged =
+        !_isEditing || widget.classroom!.teacherUid != _teacherUid;
+    if (tutorChanged) {
+      try {
+        final conflict = await ClassroomService.findActiveClassroomByTutor(
+          _teacherUid!,
+          excludeClassroomId: widget.classroom?.id,
+        );
+        if (conflict != null) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          final conflictLabel = conflict.grade.isNotEmpty
+              ? '${conflict.grade}° ${conflict.section} (${conflict.name})'
+              : conflict.name;
+          ScaffoldMessenger.of(context).showSnackBar(
+            AdminFeedback.snack(
+              AdminFeedbackType.error,
+              'Este tutor ya está asignado al aula $conflictLabel. Un tutor solo puede tener una aula activa.',
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        // Si la validación falla por red/reglas, no bloqueamos la operación:
+        // el guardado posterior reportará su propio error. Solo informamos.
+        debugPrint('findActiveClassroomByTutor falló: $e');
+      }
+    }
+
     try {
       bool ok;
       String message;
 
-      // Construye la lista final: principal + extras, sin duplicados.
-      // El service también deduplica, pero pasarla limpia evita ruido.
-      final allUids = <String>{_teacherUid!, ..._extraTeacherUids}.toList();
+      // Lista final: tutor solo, o [tutor, auxiliar] si hay auxiliar.
+      // El service deriva isPolidocente de length>1, manteniendo compatibilidad
+      // con el contrato anterior sin necesidad de migración.
+      final allUids = _auxiliarUid == null
+          ? <String>[_teacherUid!]
+          : <String>[_teacherUid!, _auxiliarUid!];
 
       if (_isEditing) {
         ok = await ClassroomService.updateClassroom(
@@ -333,10 +389,20 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Docente principal (obligatorio) + docentes adicionales.
+                  // Tutor (obligatorio) + auxiliar (opcional).
                   _buildTeacherDropdown(),
                   const SizedBox(height: 12),
-                  _buildExtraTeachersSection(),
+                  _buildAuxiliarDropdown(),
+                  if (_legacyDroppedUids.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Esta aula tenía ${_legacyDroppedUids.length + 1} docentes asignados; se conservan tutor y auxiliar. Los demás se omitirán al guardar.',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppDesignSystem.warningColor,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -478,41 +544,62 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
           );
         }
 
-        // Mapear uid → name para mostrar y guardar.
+        // Mapear uid → name y uid → isAuxiliar.
         final byUid = <String, String>{};
+        final auxByUid = <String, bool>{};
         for (final d in docs) {
           final data = d.data() as Map<String, dynamic>;
           final uid = (data['uid'] as String?) ?? d.id;
           byUid[uid] = _displayName(data);
+          auxByUid[uid] = (data['isAuxiliar'] as bool?) ?? false;
         }
-        // Si el _teacherUid actual ya no está en la lista (docente desactivado),
-        // lo conservamos como entrada extra para no perder el dato en edición.
+        // Conservar entradas legacy (docente desactivado o inactivo) para no
+        // perder el dato en edición.
         if (_teacherUid != null && !byUid.containsKey(_teacherUid)) {
           byUid[_teacherUid!] =
               '${_teacherName ?? '(docente inactivo)'} · inactivo';
+          auxByUid[_teacherUid!] = false; // legacy: lo mostramos como tutor.
         }
-        // Cache global para que la sección de extras pueda mostrar nombres
-        // sin re-suscribirse al stream.
+        if (_auxiliarUid != null && !byUid.containsKey(_auxiliarUid)) {
+          byUid[_auxiliarUid!] = '(auxiliar inactivo)';
+          auxByUid[_auxiliarUid!] = true;
+        }
+        // Cache compartida para que la sección de auxiliar reuse sin
+        // re-suscribirse al stream.
         _teacherNameByUid
           ..clear()
           ..addAll(byUid);
+        _teacherIsAuxByUid
+          ..clear()
+          ..addAll(auxByUid);
 
-        final entries = byUid.entries.toList()
+        // Filtro de tutores: solo docentes NO marcados como auxiliar.
+        final tutorEntries = byUid.entries
+            .where((e) => auxByUid[e.key] != true)
+            .toList()
           ..sort(
             (a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()),
           );
 
+        if (tutorEntries.isEmpty) {
+          return _teacherNotice(
+            icon: Icons.warning_amber_rounded,
+            color: AppDesignSystem.warningColor,
+            message: 'Sin tutores disponibles (todos están marcados como auxiliar)',
+          );
+        }
+
         return DropdownButtonFormField<String>(
-          initialValue: _teacherUid,
+          initialValue:
+              tutorEntries.any((e) => e.key == _teacherUid) ? _teacherUid : null,
           isExpanded: true,
-          validator: (v) => (v == null || v.isEmpty)
-              ? 'Selecciona un docente principal'
-              : null,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Selecciona un tutor' : null,
           decoration: AdminInputs.decoration(
-            label: 'Docente principal *',
+            label: 'Tutor *',
             prefixIcon: Icons.person_outline_rounded,
           ),
-          items: entries
+          items: tutorEntries
               .map(
                 (e) => DropdownMenuItem(
                   value: e.key,
@@ -525,9 +612,6 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
             setState(() {
               _teacherUid = v;
               _teacherName = byUid[v];
-              // Si el nuevo principal estaba como extra, quitarlo para no
-              // duplicar.
-              _extraTeacherUids.remove(v);
             });
           },
         );
@@ -559,208 +643,65 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
     );
   }
 
-  Widget _buildExtraTeachersSection() {
-    // Candidatos disponibles: cualquier docente activo que no sea el principal
-    // ni esté ya seleccionado como extra.
-    final available =
-        _teacherNameByUid.entries
-            .where(
-              (e) => e.key != _teacherUid && !_extraTeacherUids.contains(e.key),
-            )
-            .toList()
-          ..sort(
-            (a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()),
-          );
+  Widget _buildAuxiliarDropdown() {
+    // Candidatos: docentes marcados como auxiliar y distintos del tutor.
+    // Si la lista aún no cargó (cache vacía), mostramos placeholder pasivo.
+    final auxEntries = _teacherNameByUid.entries
+        .where((e) =>
+            _teacherIsAuxByUid[e.key] == true && e.key != _teacherUid)
+        .toList()
+      ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: AppDesignSystem.borderRadiusMD,
-        border: Border.all(color: _kBorder),
+    final items = <DropdownMenuItem<String?>>[
+      const DropdownMenuItem<String?>(
+        value: null,
+        child: Text('Sin auxiliar',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppDesignSystem.textSecondary,
+            )),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.group_add_outlined,
-                size: 16,
-                color: AppDesignSystem.textSecondary,
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Docentes adicionales',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppDesignSystem.textPrimary,
-                  ),
-                ),
-              ),
-              if (_extraTeacherUids.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Text(
-                    '${_extraTeacherUids.length}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppDesignSystem.primaryColor,
-                    ),
-                  ),
-                ),
-              PopupMenuButton<String>(
-                tooltip: 'Añadir docente',
-                enabled: available.isNotEmpty,
-                position: PopupMenuPosition.under,
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: AppDesignSystem.borderRadiusMD,
-                  side: const BorderSide(color: _kBorder),
-                ),
-                onSelected: (uid) => setState(() {
-                  _extraTeacherUids.add(uid);
-                }),
-                itemBuilder: (_) => available
-                    .map(
-                      (e) => PopupMenuItem<String>(
-                        value: e.key,
-                        child: Text(
-                          e.value,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: available.isEmpty
-                        ? _kBorder
-                        : AppDesignSystem.primaryColor.withValues(alpha: 0.08),
-                    borderRadius: AppDesignSystem.borderRadiusFull,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.add_rounded,
-                        size: 14,
-                        color: available.isEmpty
-                            ? AppDesignSystem.textSecondary
-                            : AppDesignSystem.primaryColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Añadir',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: available.isEmpty
-                              ? AppDesignSystem.textSecondary
-                              : AppDesignSystem.primaryColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (_extraTeacherUids.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 4, left: 24),
-              child: Text(
-                'Opcional. Si añades más de un docente, el aula queda como polidocente.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppDesignSystem.textSecondary,
-                ),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: _extraTeacherUids
-                    .map(
-                      (uid) => _TeacherChip(
-                        label: _teacherNameByUid[uid] ?? _shortUid(uid),
-                        onRemove: () => setState(() {
-                          _extraTeacherUids.remove(uid);
-                        }),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-        ],
+      ...auxEntries.map(
+        (e) => DropdownMenuItem<String?>(
+          value: e.key,
+          child: Text(e.value, overflow: TextOverflow.ellipsis),
+        ),
       ),
+    ];
+
+    // Si el _auxiliarUid actual no está en la lista (auxiliar inactivo o
+    // marca quitada), lo conservamos como entrada extra para no perder dato.
+    if (_auxiliarUid != null &&
+        !auxEntries.any((e) => e.key == _auxiliarUid)) {
+      items.add(DropdownMenuItem<String?>(
+        value: _auxiliarUid,
+        child: Text(
+          '${_teacherNameByUid[_auxiliarUid] ?? _shortUid(_auxiliarUid!)} · legacy',
+          overflow: TextOverflow.ellipsis,
+        ),
+      ));
+    }
+
+    final hint = auxEntries.isEmpty && _auxiliarUid == null
+        ? 'Sin auxiliares activos'
+        : null;
+
+    return DropdownButtonFormField<String?>(
+      initialValue: _auxiliarUid,
+      isExpanded: true,
+      decoration: AdminInputs.decoration(
+        label: 'Auxiliar (opcional)',
+        hint: hint,
+        prefixIcon: Icons.support_agent_rounded,
+      ),
+      items: items,
+      onChanged: (v) => setState(() => _auxiliarUid = v),
     );
   }
 }
 
-/// Chip compacto para mostrar un docente adicional con botón de eliminar.
+/// Acorta un uid de Firebase para fallback visual cuando no hay nombre.
 String _shortUid(String uid) {
   if (uid.length <= 8) return uid;
   return '${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}';
-}
-
-class _TeacherChip extends StatelessWidget {
-  final String label;
-  final VoidCallback onRemove;
-
-  const _TeacherChip({required this.label, required this.onRemove});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 5, 4, 5),
-      decoration: BoxDecoration(
-        color: AppDesignSystem.primaryColor.withValues(alpha: 0.08),
-        borderRadius: AppDesignSystem.borderRadiusFull,
-        border: Border.all(
-          color: AppDesignSystem.primaryColor.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppDesignSystem.primaryColor,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: onRemove,
-            child: const Padding(
-              padding: EdgeInsets.all(2),
-              child: Icon(
-                Icons.close_rounded,
-                size: 14,
-                color: AppDesignSystem.primaryColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

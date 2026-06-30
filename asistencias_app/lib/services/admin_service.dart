@@ -19,6 +19,7 @@ class AdminService {
     required String temporaryPassword,
     String? phone,
     String? subject,
+    bool isAuxiliar = false,
   }) async {
     FirebaseApp? secondaryApp;
     FirebaseAuth? secondaryAuth;
@@ -53,6 +54,7 @@ class AdminService {
         'fullName': fullName,
         'role': 'docente',
         'isActive': true,
+        'isAuxiliar': isAuxiliar,
         'needsRegistration': true, // compatibilidad legacy
         'mustChangePassword': true,
         'createdAt': FieldValue.serverTimestamp(),
@@ -129,6 +131,7 @@ class AdminService {
     required String fullName,
     String? phone,
     String? subject,
+    bool? isAuxiliar,
   }) async {
     try {
       final data = <String, dynamic>{
@@ -137,6 +140,7 @@ class AdminService {
       };
       if (phone != null) data['phone'] = phone.trim();
       if (subject != null) data['subject'] = subject.trim();
+      if (isAuxiliar != null) data['isAuxiliar'] = isAuxiliar;
       await _firestore.collection('users').doc(teacherUid).update(data);
       return true;
     } catch (e) {
