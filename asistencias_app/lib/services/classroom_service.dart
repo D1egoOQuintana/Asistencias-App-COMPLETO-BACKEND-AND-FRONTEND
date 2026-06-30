@@ -7,7 +7,11 @@ class ClassroomService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Crear un nuevo salón/aula
+  /// Crear un nuevo salón/aula.
+  ///
+  /// `teacherUids` opcional. Si se omite, se deriva como `[teacherUid]` y
+  /// `isPolidocente=false`. Si se pasa, el contrato polidocente queda:
+  /// teacherUids único, contiene a teacherUid, isPolidocente = length > 1.
   static Future<Map<String, dynamic>> createClassroom({
     required String name,
     required String grade,
@@ -16,6 +20,7 @@ class ClassroomService {
     String? description,
     String? teacherUid,
     String? teacherName,
+    List<String>? teacherUids,
   }) async {
     try {
       // Verificar que el usuario actual sea docente o admin
@@ -45,6 +50,11 @@ class ClassroomService {
 
       // Crear el salón
       final effectiveTeacherUid = teacherUid ?? currentUser.uid;
+      // Lista efectiva única, garantiza inclusión del principal.
+      final effectiveUids = <String>{
+        effectiveTeacherUid,
+        ...?teacherUids,
+      }.toList();
       final classroom = ClassroomModel(
         name: name,
         grade: grade,
@@ -52,8 +62,8 @@ class ClassroomService {
         capacity: capacity,
         description: description,
         teacherUid: effectiveTeacherUid,
-        teacherUids: [effectiveTeacherUid],
-        isPolidocente: false,
+        teacherUids: effectiveUids,
+        isPolidocente: effectiveUids.length > 1,
         teacherName: teacherName,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -139,7 +149,11 @@ class ClassroomService {
         .snapshots();
   }
 
-  /// Actualizar salón
+  /// Actualizar salón.
+  ///
+  /// `teacherUids` opcional: si se omite y se pasa `teacherUid`, se asume
+  /// no polidocente y se sincroniza como `[teacherUid]`. Si se pasa la lista,
+  /// se garantiza unicidad y que el principal esté incluido.
   static Future<bool> updateClassroom({
     required String classroomId,
     required String name,
@@ -149,6 +163,7 @@ class ClassroomService {
     String? description,
     String? teacherUid,
     String? teacherName,
+    List<String>? teacherUids,
   }) async {
     try {
       final update = <String, dynamic>{
@@ -161,10 +176,13 @@ class ClassroomService {
         'teacherName': teacherName,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       };
-      // Sincroniza teacherUids cuando el aula no es polidocente.
-      // No tocar si ya existe lógica polidocente real (futura Fase D).
       if (teacherUid != null && teacherUid.isNotEmpty) {
-        update['teacherUids'] = [teacherUid];
+        final effective = <String>{
+          teacherUid,
+          ...?teacherUids,
+        }.toList();
+        update['teacherUids'] = effective;
+        update['isPolidocente'] = effective.length > 1;
       }
       await _firestore.collection('classrooms').doc(classroomId).update(update);
       return true;
