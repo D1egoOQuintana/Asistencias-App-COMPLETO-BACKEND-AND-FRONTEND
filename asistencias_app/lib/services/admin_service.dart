@@ -17,6 +17,8 @@ class AdminService {
     required String email,
     required String fullName,
     required String temporaryPassword,
+    String? phone,
+    String? subject,
   }) async {
     FirebaseApp? secondaryApp;
     FirebaseAuth? secondaryAuth;
@@ -57,6 +59,9 @@ class AdminService {
         'createdByAdmin': true,
         'temporaryPassword':
             temporaryPassword, // Solo para referencia del admin
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        if (subject != null && subject.trim().isNotEmpty)
+          'subject': subject.trim(),
       });
 
       // Cerrar sesión en la instancia secundaria
@@ -122,12 +127,17 @@ class AdminService {
   static Future<bool> updateTeacher({
     required String teacherUid,
     required String fullName,
+    String? phone,
+    String? subject,
   }) async {
     try {
-      await _firestore.collection('users').doc(teacherUid).update({
+      final data = <String, dynamic>{
         'fullName': fullName,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      if (phone != null) data['phone'] = phone.trim();
+      if (subject != null) data['subject'] = subject.trim();
+      await _firestore.collection('users').doc(teacherUid).update(data);
       return true;
     } catch (e) {
       print('Error updating teacher: $e');

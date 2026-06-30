@@ -173,10 +173,15 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
   }
 
-  void _showEdit(String uid, String currentName) {
+  void _showEdit(String uid, String currentName, String phone, String subject) {
     showDialog(
       context: context,
-      builder: (_) => _TeacherEditDialog(uid: uid, currentName: currentName),
+      builder: (_) => _TeacherEditDialog(
+        uid: uid,
+        currentName: currentName,
+        currentPhone: phone,
+        currentSubject: subject,
+      ),
     );
   }
 
@@ -403,7 +408,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     docs: pageDocs,
                     classroomCount: classroomCount,
                     displayName: _displayName,
-                    onEdit: (uid, name) => _showEdit(uid, name),
+                    onEdit: (uid, name, phone, subject) =>
+                        _showEdit(uid, name, phone, subject),
                     onToggle: (uid, name, active) =>
                         _confirmToggle(uid, name, active),
                     onForceReset: (uid, name) => _confirmForceReset(uid, name),
@@ -413,7 +419,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     classroomCount: classroomCount,
                     displayName: _displayName,
                     initial: _initial,
-                    onEdit: (uid, name) => _showEdit(uid, name),
+                    onEdit: (uid, name, phone, subject) =>
+                        _showEdit(uid, name, phone, subject),
                     onToggle: (uid, name, active) =>
                         _confirmToggle(uid, name, active),
                     onForceReset: (uid, name) => _confirmForceReset(uid, name),
@@ -545,7 +552,7 @@ class _WebTable extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final Map<String, int> classroomCount;
   final String Function(Map<String, dynamic>) displayName;
-  final void Function(String uid, String name) onEdit;
+  final void Function(String uid, String name, String phone, String subject) onEdit;
   final void Function(String uid, String name, bool active) onToggle;
   final void Function(String uid, String name) onForceReset;
 
@@ -580,12 +587,16 @@ class _WebTable extends StatelessWidget {
                   final email = (d['email'] ?? '').toString();
                   final isActive = d['isActive'] as bool? ?? false;
                   final count = classroomCount[uid] ?? 0;
+                  final phone = (d['phone'] ?? '').toString().trim();
+                  final subject = (d['subject'] ?? '').toString().trim();
                   return _TableRow(
                     uid: uid,
                     name: name,
                     email: email,
                     isActive: isActive,
                     classroomCount: count,
+                    phone: phone,
+                    subject: subject,
                     onEdit: onEdit,
                     onToggle: onToggle,
                     onForceReset: onForceReset,
@@ -607,7 +618,9 @@ class _TableRow extends StatefulWidget {
   final String email;
   final bool isActive;
   final int classroomCount;
-  final void Function(String uid, String name) onEdit;
+  final String phone;
+  final String subject;
+  final void Function(String uid, String name, String phone, String subject) onEdit;
   final void Function(String uid, String name, bool active) onToggle;
   final void Function(String uid, String name) onForceReset;
   final bool isLast;
@@ -618,6 +631,8 @@ class _TableRow extends StatefulWidget {
     required this.email,
     required this.isActive,
     required this.classroomCount,
+    required this.phone,
+    required this.subject,
     required this.onEdit,
     required this.onToggle,
     required this.onForceReset,
@@ -668,10 +683,24 @@ class _TableRowState extends State<_TableRow> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  widget.name,
-                  style: AdminType.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.name,
+                      style: AdminType.bodyStrong,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (widget.subject.isNotEmpty)
+                      Text(
+                        widget.subject,
+                        style: AdminType.bodySm.copyWith(
+                            color: AppDesignSystem.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -697,7 +726,8 @@ class _TableRowState extends State<_TableRow> {
               AdminActionIcon(
                 icon: Icons.edit_outlined,
                 tooltip: 'Editar',
-                onTap: () => widget.onEdit(widget.uid, widget.name),
+                onTap: () => widget.onEdit(
+                    widget.uid, widget.name, widget.phone, widget.subject),
               ),
               _RowMenu(
                 isActive: widget.isActive,
@@ -800,7 +830,7 @@ class _MobileList extends StatelessWidget {
   final Map<String, int> classroomCount;
   final String Function(Map<String, dynamic>) displayName;
   final String Function(String) initial;
-  final void Function(String uid, String name) onEdit;
+  final void Function(String uid, String name, String phone, String subject) onEdit;
   final void Function(String uid, String name, bool active) onToggle;
   final void Function(String uid, String name) onForceReset;
 
@@ -827,6 +857,8 @@ class _MobileList extends StatelessWidget {
         final email = (d['email'] ?? '').toString();
         final isActive = d['isActive'] as bool? ?? false;
         final count = classroomCount[uid] ?? 0;
+        final phone = (d['phone'] ?? '').toString().trim();
+        final subject = (d['subject'] ?? '').toString().trim();
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -873,6 +905,17 @@ class _MobileList extends StatelessWidget {
                                   fontSize: 12,
                                   color: AppDesignSystem.textSecondary),
                               overflow: TextOverflow.ellipsis),
+                          if (subject.isNotEmpty || phone.isNotEmpty)
+                            Text(
+                              [
+                                if (subject.isNotEmpty) subject,
+                                if (phone.isNotEmpty) phone,
+                              ].join(' · '),
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppDesignSystem.textSecondary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),
@@ -895,7 +938,7 @@ class _MobileList extends StatelessWidget {
                       icon: const Icon(Icons.edit_outlined, size: 15),
                       label: const Text('Editar',
                           style: TextStyle(fontSize: 12)),
-                      onPressed: () => onEdit(uid, name),
+                      onPressed: () => onEdit(uid, name, phone, subject),
                     ),
                     TextButton.icon(
                       style: TextButton.styleFrom(
@@ -1024,6 +1067,8 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _subjectCtrl = TextEditingController();
   bool _obscure = true;
   bool _saving = false;
 
@@ -1032,6 +1077,8 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _phoneCtrl.dispose();
+    _subjectCtrl.dispose();
     super.dispose();
   }
 
@@ -1046,6 +1093,8 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
       email: _emailCtrl.text.trim(),
       fullName: _nameCtrl.text.trim(),
       temporaryPassword: _passCtrl.text,
+      phone: _phoneCtrl.text.trim(),
+      subject: _subjectCtrl.text.trim(),
     );
 
     if (!mounted) return;
@@ -1164,6 +1213,25 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 14),
+
+                // Teléfono
+                _formField(
+                  controller: _phoneCtrl,
+                  label: 'Teléfono',
+                  hint: 'Ej: 987 654 321',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 14),
+
+                // Materia / Especialidad
+                _formField(
+                  controller: _subjectCtrl,
+                  label: 'Materia / Especialidad',
+                  hint: 'Ej: Matemáticas',
+                  icon: Icons.school_outlined,
+                ),
                 const SizedBox(height: 24),
 
                 // Actions
@@ -1220,9 +1288,15 @@ class _TeacherCreateDialogState extends State<_TeacherCreateDialog> {
 class _TeacherEditDialog extends StatefulWidget {
   final String uid;
   final String currentName;
+  final String currentPhone;
+  final String currentSubject;
 
-  const _TeacherEditDialog(
-      {required this.uid, required this.currentName});
+  const _TeacherEditDialog({
+    required this.uid,
+    required this.currentName,
+    this.currentPhone = '',
+    this.currentSubject = '',
+  });
 
   @override
   State<_TeacherEditDialog> createState() => _TeacherEditDialogState();
@@ -1231,17 +1305,23 @@ class _TeacherEditDialog extends StatefulWidget {
 class _TeacherEditDialogState extends State<_TeacherEditDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _subjectCtrl;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.currentName);
+    _phoneCtrl = TextEditingController(text: widget.currentPhone);
+    _subjectCtrl = TextEditingController(text: widget.currentSubject);
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _subjectCtrl.dispose();
     super.dispose();
   }
 
@@ -1255,6 +1335,8 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
     final ok = await AdminService.updateTeacher(
       teacherUid: widget.uid,
       fullName: _nameCtrl.text.trim(),
+      phone: _phoneCtrl.text.trim(),
+      subject: _subjectCtrl.text.trim(),
     );
 
     if (!mounted) return;
@@ -1322,6 +1404,25 @@ class _TeacherEditDialogState extends State<_TeacherEditDialog> {
                   decoration: AdminInputs.decoration(
                     label: 'Nombre completo *',
                     prefixIcon: Icons.person_outline_rounded,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: AdminInputs.decoration(
+                    label: 'Teléfono',
+                    hint: 'Ej: 987 654 321',
+                    prefixIcon: Icons.phone_outlined,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _subjectCtrl,
+                  decoration: AdminInputs.decoration(
+                    label: 'Materia / Especialidad',
+                    hint: 'Ej: Matemáticas',
+                    prefixIcon: Icons.school_outlined,
                   ),
                 ),
                 const SizedBox(height: 24),
