@@ -58,6 +58,15 @@ class _AbsenteesNotifierSheetState extends State<AbsenteesNotifierSheet> {
     return '$dd/$mm/${date.year}';
   }
 
+  bool _isPresenceAttendance(Map<String, dynamic> data) {
+    final status = (data['status'] ?? '').toString().trim().toLowerCase();
+    final source = (data['source'] ?? '').toString().trim().toLowerCase();
+    if (status == 'absent' || status == 'ausente' || source == 'auto_absent') {
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -86,7 +95,9 @@ class _AbsenteesNotifierSheetState extends State<AbsenteesNotifierSheet> {
 
       final presentIds = <String>{};
       for (final doc in attendanceSnap.docs) {
-        final sid = (doc.data()['studentId'] ?? '').toString().trim();
+        final data = doc.data();
+        if (!_isPresenceAttendance(data)) continue;
+        final sid = (data['studentId'] ?? '').toString().trim();
         if (sid.isNotEmpty) presentIds.add(sid);
       }
 
