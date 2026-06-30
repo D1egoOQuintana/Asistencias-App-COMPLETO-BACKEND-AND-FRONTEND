@@ -568,7 +568,9 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
       // Fila 2: Información del mes y aula
       cell = sheet.cell(excel_pkg.CellIndex.indexByString('A2'));
-      cell.value = excel_pkg.TextCellValue('MES: $monthName');
+      cell.value = excel_pkg.TextCellValue(
+        'MES: $monthName     GENERADO: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+      );
       cell.cellStyle = subHeaderStyle;
       sheet.merge(
         excel_pkg.CellIndex.indexByString('A2'),
@@ -711,6 +713,28 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         );
         cell.value = excel_pkg.TextCellValue(legendItems[i]);
         cell.cellStyle = excel_pkg.CellStyle(fontSize: 9);
+      }
+
+      // Firmas (misma plantilla que el PDF: Docente / Director).
+      currentRow += 3;
+      const signCols = [1, 5];
+      const signLabels = ['Docente', 'Director(a)'];
+      for (int i = 0; i < signLabels.length; i++) {
+        var sign = sheet.cell(
+          excel_pkg.CellIndex.indexByColumnRow(
+            columnIndex: signCols[i],
+            rowIndex: currentRow,
+          ),
+        );
+        sign.value = excel_pkg.TextCellValue('____________________');
+        sign = sheet.cell(
+          excel_pkg.CellIndex.indexByColumnRow(
+            columnIndex: signCols[i],
+            rowIndex: currentRow + 1,
+          ),
+        );
+        sign.value = excel_pkg.TextCellValue(signLabels[i]);
+        sign.cellStyle = excel_pkg.CellStyle(bold: true, fontSize: 10);
       }
 
       // Ajustar anchos de columnas
@@ -1454,7 +1478,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
   Widget _buildOverviewContent() {
     final avg = (overviewData?['averageAttendance'] as num?)?.toDouble() ?? 0;
-    final chronic = (overviewData?['chronicAbsenteeism'] as int?) ?? 0;
     final trend =
         (overviewData?['trend'] as List?)?.cast<double>() ??
         [0.0, 0.0, 0.0, 0.0];
@@ -1557,6 +1580,10 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             final isCompact = constraints.maxWidth < 600;
             final cardSpacing = isCompact ? 16.0 : 32.0;
 
+            final sessions = (overviewData?['totalSessions'] as int?) ?? 0;
+            final trendDelta = trend.isNotEmpty ? trend.last - trend.first : 0.0;
+            final trendUp = trendDelta >= 0;
+
             final cards = [
               _buildHtmlStatCard(
                 title: 'ASISTENCIA PROMEDIO',
@@ -1565,42 +1592,41 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 subtitleWidget: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.trending_up,
-                      color: Color(0xFF1976D2),
+                    Icon(
+                      trendUp ? Icons.trending_up : Icons.trending_down,
+                      color: trendUp
+                          ? const Color(0xFF1DA056)
+                          : const Color(0xFFBA1A1A),
                       size: 16,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      '+2.4%',
-                      style: GoogleFonts.workSans(
-                        color: const Color(0xFF1976D2),
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        '${trendUp ? '+' : ''}${trendDelta.toStringAsFixed(1)}% vs inicio del mes',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.workSans(
+                          color: trendUp
+                              ? const Color(0xFF1DA056)
+                              : const Color(0xFFBA1A1A),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               _buildHtmlStatCard(
-                title: 'AUSENTISMO CRÓNICO',
-                value: '$chronic',
-                icon: Icons.assignment_turned_in,
-                subtitleWidget: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD8E2FF),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    'META CUMPLIDA',
-                    style: GoogleFonts.workSans(
-                      color: const Color(0xFF004493),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                title: 'SESIONES DEL MES',
+                value: '$sessions',
+                icon: Icons.event_available,
+                subtitleWidget: Text(
+                  'días con registro',
+                  style: GoogleFonts.workSans(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -1753,7 +1779,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  subtitleWidget,
+                  Flexible(child: subtitleWidget),
                 ],
               ),
             ],

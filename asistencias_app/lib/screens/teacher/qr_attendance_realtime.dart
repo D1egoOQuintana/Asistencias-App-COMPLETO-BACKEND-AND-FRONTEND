@@ -50,7 +50,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
   bool _isProcessingScan = false;
   bool _isTorchEnabled = false;
   String _lastScanMessage = 'Listo para escanear';
-  Color _lastScanColor = const Color(0xFF4FC3F7);
+  Color _lastScanColor = const Color(0xFF1976D2);
   DateTime? _lastScanAt;
   String? _lastScanRaw;
   _ScannedStudentCardData? _lastScannedStudent;
@@ -325,7 +325,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
     setState(() {
       _isProcessingScan = true;
       _lastScanMessage = 'Procesando QR...';
-      _lastScanColor = const Color(0xFF4FC3F7);
+      _lastScanColor = const Color(0xFF1976D2);
     });
 
     try {
@@ -619,7 +619,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                                   _lastScannedStudent = null;
                                   _lastScanMessage =
                                       'Aula cambiada. Listo para escanear';
-                                  _lastScanColor = const Color(0xFF4FC3F7);
+                                  _lastScanColor = const Color(0xFF1976D2);
                                 });
                                 context.read<AttendanceProvider>().configure(
                                   classroomId: value,
@@ -718,7 +718,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
                                             gradient: const LinearGradient(
                                               colors: [
                                                 Colors.transparent,
-                                                Color(0xFF4FC3F7),
+                                                Color(0xFF1976D2),
                                                 Color(0xFF67FFC4),
                                                 Colors.transparent,
                                               ],
@@ -909,12 +909,12 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
           decoration: BoxDecoration(
             borderRadius: borderRadius,
             border: const Border(
-              top: BorderSide(color: Color(0xFF4FC3F7), width: 4),
-              left: BorderSide(color: Color(0xFF4FC3F7), width: 4),
+              top: BorderSide(color: Color(0xFF1976D2), width: 4),
+              left: BorderSide(color: Color(0xFF1976D2), width: 4),
             ),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x884FC3F7),
+                color: Color(0x881976D2),
                 blurRadius: 12,
                 spreadRadius: 1,
               ),

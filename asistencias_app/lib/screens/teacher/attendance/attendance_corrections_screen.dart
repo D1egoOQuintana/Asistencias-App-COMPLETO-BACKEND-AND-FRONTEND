@@ -416,13 +416,6 @@ class _AttendanceCorrectionsScreenState
                                         color: _ink,
                                       ),
                                     ),
-                                    Text(
-                                      'ID: $studentId',
-                                      style: const TextStyle(
-                                        color: _muted,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),

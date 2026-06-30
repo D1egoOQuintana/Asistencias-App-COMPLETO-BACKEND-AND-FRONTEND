@@ -428,59 +428,6 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
             ? 'Docente'
             : user.fullName.trim().split(' ').first;
         final now = _liveNow;
-        final weekdayKey = _getWeekdayKey(now.weekday);
-
-        final todaysScheduled = classrooms
-            .where(
-              (classroom) =>
-                  classroom.schedule != null &&
-                  classroom.schedule!.containsKey(weekdayKey),
-            )
-            .toList();
-
-        final ongoingClassrooms =
-            todaysScheduled.where((classroom) {
-              final schedule = classroom.schedule![weekdayKey]!;
-              return _isNowInsideClassroomSchedule(now, schedule);
-            }).toList()..sort((a, b) {
-              final aTime = _parseTimeOnDate(
-                now,
-                a.schedule![weekdayKey]!.startTime,
-              );
-              final bTime = _parseTimeOnDate(
-                now,
-                b.schedule![weekdayKey]!.startTime,
-              );
-              return aTime.compareTo(bTime);
-            });
-
-        final upcomingClassrooms =
-            todaysScheduled.where((classroom) {
-              final schedule = classroom.schedule![weekdayKey]!;
-              return _parseTimeOnDate(now, schedule.startTime).isAfter(now);
-            }).toList()..sort((a, b) {
-              final aTime = _parseTimeOnDate(
-                now,
-                a.schedule![weekdayKey]!.startTime,
-              );
-              final bTime = _parseTimeOnDate(
-                now,
-                b.schedule![weekdayKey]!.startTime,
-              );
-              return aTime.compareTo(bTime);
-            });
-
-        final hasActiveClass = ongoingClassrooms.isNotEmpty;
-        final targetClassroom = hasActiveClass
-            ? ongoingClassrooms.first
-            : (upcomingClassrooms.isNotEmpty ? upcomingClassrooms.first : null);
-
-        final targetSchedule = targetClassroom?.schedule?[weekdayKey];
-        final nextTime = targetSchedule == null
-            ? '--:--'
-            : hasActiveClass
-            ? '${targetSchedule.startTime} - ${targetSchedule.endTime}'
-            : targetSchedule.startTime;
 
         final greeting = now.hour < 12
             ? 'Buenos días'
@@ -491,9 +438,6 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
         return LayoutBuilder(
           builder: (context, constraints) {
             final isMobile = constraints.maxWidth < 760;
-            final metricWidth = isMobile
-                ? (constraints.maxWidth - 12) / 2
-                : (constraints.maxWidth - 36) / 4;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,41 +452,7 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                     letterSpacing: -1,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Tienes ${todaysScheduled.length} clases programadas para hoy.',
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    SizedBox(
-                      width: metricWidth,
-                      child: _buildTeacherBentoMetric(
-                        title: 'Aulas Totales',
-                        value: '${classrooms.length}',
-                        icon: Icons.hub,
-                      ),
-                    ),
-                    SizedBox(
-                      width: metricWidth,
-                      child: _buildTeacherNextClassMetric(
-                        title: hasActiveClass
-                            ? 'CLASE ACTIVA'
-                            : 'PRÓXIMA CLASE',
-                        className: targetClassroom?.name ?? 'Sin clase',
-                        classTime: nextTime,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 28),
                 _buildTeacherCentralQrAction(context),
                 const SizedBox(height: 24),
                 _buildTeacherRecentScans(classrooms: classrooms),
@@ -551,126 +461,6 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
           },
         );
       },
-    );
-  }
-
-  Widget _buildTeacherBentoMetric({
-    required String title,
-    required String value,
-    required IconData icon,
-    Color iconContainerColor = const Color(0xFFF1F5FF),
-    Color iconColor = const Color(0xFF1976D2),
-  }) {
-    return Container(
-      height: 156,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF000D33).withValues(alpha: 0.03),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title.toUpperCase(),
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 11,
-              color: Color(0xFF64748B),
-              letterSpacing: 0.8,
-            ),
-          ),
-          const Spacer(),
-          Row(
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    maxLines: 1,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 32,
-                      color: Color(0xFF000D33),
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ),
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: iconContainerColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Icon(icon, color: iconColor),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTeacherNextClassMetric({
-    required String title,
-    required String className,
-    required String classTime,
-  }) {
-    return Container(
-      height: 156,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [_celeste, _celesteDark],
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.84),
-              fontWeight: FontWeight.w700,
-              fontSize: 11,
-              letterSpacing: 0.8,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            className,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 24,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            classTime,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.86),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
