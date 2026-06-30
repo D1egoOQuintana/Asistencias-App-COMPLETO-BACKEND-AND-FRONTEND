@@ -102,6 +102,12 @@ asistencias_app/.idea/
 Thumbs.db
 desktop.ini
 
+# ===== CREDENCIALES / SERVICE ACCOUNTS =====
+serviceAccount*.json
+*-service-account.json
+*.service-account.json
+*-adminsdk-*.json
+
 # ===== TEMPORALES =====
 backup-*/
 temp_*
