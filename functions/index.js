@@ -9,8 +9,6 @@ let tsModules;
 try {
   tsModules = require("./lib/index");
   exports.api = tsModules.api;
-  exports.auth = tsModules.auth;
-  exports.whatsappOnAttendanceCreate = tsModules.whatsappOnAttendanceCreate;
   
   // ✅ USAR FUNCIONES DE TELEGRAM DEL ARCHIVO telegram.ts (compilado)
   exports.sendTelegramNotification = tsModules.sendTelegramNotification;
