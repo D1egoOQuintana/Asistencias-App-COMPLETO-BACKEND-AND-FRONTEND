@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:ui' as ui;
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -11,10 +10,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:excel/excel.dart' as excel_pkg;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 import '../../../theme/app_design_system.dart';
 import '../../../widgets/common/app_feedback_dialog.dart';
+import '../../../widgets/common/app_glass_top_bar.dart';
 
 class _LegendDot extends StatelessWidget {
   final Color color;
@@ -58,8 +58,6 @@ class TeacherReportsScreen extends StatefulWidget {
 class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   static const Color _brandBlue = Color(0xFF1976D2);
   static const Color _secondary = Color(0xFF1976D2);
-  static const Color _outline = Color(0xFF5F6470);
-  static const Color _outlineVariant = Color(0xFFC5C6D2);
 
   final _firestore = FirebaseFirestore.instance;
   final _functions = FirebaseFunctions.instance;
@@ -92,7 +90,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
   bool isLoading = false;
   String loadingMessage = 'Analizando...';
-  Map<String, dynamic>? aiInsights;
   List<Map<String, dynamic>> classrooms = [];
   bool isApplyingFilters = false;
   String? overviewError;
@@ -304,68 +301,22 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         .toList();
   }
 
-  Future<void> _generateAIInsights() async {
-    if (selectedClassroomId == null) {
-      _showError('Selecciona un aula primero');
-      return;
-    }
+  /// Datos del aula seleccionada (ya cargada localmente en [classrooms]).
+  /// Fuente única para el encabezado UGEL — no depende de metadata del backend.
+  Map<String, dynamic> _selectedClassroomData() => classrooms.firstWhere(
+    (c) => c['id'] == selectedClassroomId,
+    orElse: () => const <String, dynamic>{},
+  );
 
-    _setStateIfMounted(() {
-      isLoading = true;
-      loadingMessage = 'Sincronizando datos...';
-      aiInsights = null;
-    });
-
-    try {
-      // Esperar 2 segundos para asegurar sincronización de Firestore
-      await Future.delayed(const Duration(seconds: 2));
-
-      _setStateIfMounted(() {
-        loadingMessage = 'Obteniendo asistencias...';
-      });
-
-      final attendanceResult = await _functions
-          .httpsCallable('getAttendanceReportData')
-          .call({
-            'classroomId': selectedClassroomId,
-            'startDate': startDate.toIso8601String(),
-            'endDate': endDate.toIso8601String(),
-          });
-
-      if (attendanceResult.data['success'] != true) {
-        throw Exception(
-          attendanceResult.data['message'] ?? 'Error obteniendo datos',
-        );
-      }
-
-      final attendanceData = attendanceResult.data['data'];
-
-      _setStateIfMounted(() {
-        loadingMessage = 'Generando análisis con IA...';
-      });
-
-      // Ahora generar el análisis con IA usando esos datos
-      final result = await _functions
-          .httpsCallable('generateReportWithAI')
-          .call({
-            'classroomId': selectedClassroomId,
-            'startDate': startDate.toIso8601String(),
-            'endDate': endDate.toIso8601String(),
-            'attendanceData': attendanceData,
-          });
-
-      _setStateIfMounted(() {
-        aiInsights = result.data as Map<String, dynamic>;
-        isLoading = false;
-        loadingMessage = 'Analizando...';
-      });
-    } catch (e) {
-      _setStateIfMounted(() {
-        isLoading = false;
-        loadingMessage = 'Analizando...';
-      });
-      _showError('Error al generar análisis con IA: $e');
-    }
+  /// Docente del aula; cae al usuario autenticado si el aula no lo tiene.
+  String _teacherLabel() {
+    final name = (_selectedClassroomData()['teacherName'] ?? '')
+        .toString()
+        .trim();
+    if (name.isNotEmpty) return name;
+    final user = _auth.currentUser;
+    final display = user?.displayName?.trim() ?? '';
+    return display.isNotEmpty ? display : (user?.email ?? 'N/A');
   }
 
   /// Obtener datos de asistencia usando la API profesional del backend
@@ -406,7 +357,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       print('⚠️ Usando fallback para obtener datos: $e');
       // Obtener todas las asistencias del aula y filtrar por fecha en memoria
       final attendanceSnapshot = await _firestore
-          .collection('attendances')
+          .collection('attendance')
           .where('classroomId', isEqualTo: selectedClassroomId)
           .get();
 
@@ -548,11 +499,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
       final students = data['students'] as List?;
       final attendances = data['attendances'] as List?;
-      // Convertir explícitamente metadata
-      final metadataRaw = data['metadata'];
-      final metadata = metadataRaw != null
-          ? Map<String, dynamic>.from(metadataRaw as Map)
-          : null;
 
       if (students == null || students.isEmpty) {
         _setStateIfMounted(() => isLoading = false);
@@ -648,7 +594,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
       cell = sheet.cell(excel_pkg.CellIndex.indexByString('F2'));
       cell.value = excel_pkg.TextCellValue(
-        'AULA: ${metadata?['classroom'] ?? 'N/A'}',
+        'AULA: ${_classroomLabel(_selectedClassroomData())}   |   DOCENTE: ${_teacherLabel()}',
       );
       cell.cellStyle = subHeaderStyle;
       sheet.merge(
@@ -791,22 +737,21 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         sheet.setColumnWidth(i, 4); // Días
       }
 
-      // Guardar archivo
-      final directory = await getApplicationDocumentsDirectory();
+      // Guardar archivo localmente
       final filename =
           'Asistencia_UGEL06_${monthName.replaceAll(' ', '_')}.xlsx';
-      final file = File('${directory.path}/$filename');
       final excelBytes = excel.encode();
 
       if (excelBytes != null) {
-        await file.writeAsBytes(excelBytes);
-        await Share.shareXFiles([
-          XFile(file.path),
-        ], text: 'Reporte de Asistencia UGEL 06');
+        await _deliverReport(
+          excelBytes,
+          filename,
+          'Reporte de Asistencia UGEL 06',
+        );
       }
 
       _setStateIfMounted(() => isLoading = false);
-      _showSuccess('Reporte Excel generado exitosamente');
+      _showSuccess('Reporte Excel descargado');
     } catch (e) {
       _setStateIfMounted(() => isLoading = false);
       _showError('Error al generar Excel: $e');
@@ -856,11 +801,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       // Validar que tengamos datos
       final students = data['students'] as List?;
       final attendances = data['attendances'] as List?;
-      // Convertir explícitamente metadata
-      final metadataRaw = data['metadata'];
-      final metadata = metadataRaw != null
-          ? Map<String, dynamic>.from(metadataRaw as Map)
-          : null;
 
       print('📊 Datos obtenidos:');
       print('   Estudiantes: ${students?.length ?? 0}');
@@ -932,7 +872,11 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                           style: const pw.TextStyle(fontSize: 10),
                         ),
                         pw.Text(
-                          'Aula: ${metadata?['classroom'] ?? 'N/A'}',
+                          'Aula: ${_classroomLabel(_selectedClassroomData())}',
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          'Docente: ${_teacherLabel()}',
                           style: const pw.TextStyle(fontSize: 10),
                         ),
                       ],
@@ -1059,19 +1003,71 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         ),
       );
 
-      // Compartir PDF
-      await Printing.sharePdf(
-        bytes: await pdf.save(),
-        filename: 'asistencia_${monthName.replaceAll(' ', '_')}.pdf',
+      // Descargar PDF localmente
+      await _deliverReport(
+        await pdf.save(),
+        'asistencia_${monthName.replaceAll(' ', '_')}.pdf',
+        'Reporte de Asistencia',
       );
 
       _setStateIfMounted(() => isLoading = false);
-      _showSuccess('Reporte PDF generado exitosamente');
+      _showSuccess('Reporte PDF descargado');
     } catch (e) {
       _setStateIfMounted(() => isLoading = false);
       _showError('Error al generar PDF: $e');
       print('Error detallado: $e');
     }
+  }
+
+  /// Guarda los bytes en la carpeta de Descargas del dispositivo y devuelve la ruta.
+  // ponytail: ruta pública directa de Descargas; en Android 13+ el scoped storage
+  // puede bloquearla → cae a getApplicationDocumentsDirectory (igual local, visible en Archivos).
+  Future<String?> _saveToDownloads(List<int> bytes, String filename) async {
+    try {
+      if (Platform.isAndroid) {
+        await Permission.storage.request();
+        final dir = Directory('/storage/emulated/0/Download');
+        if (await dir.exists()) {
+          final file = File('${dir.path}/$filename');
+          await file.writeAsBytes(bytes, flush: true);
+          return file.path;
+        }
+      } else {
+        final dir = await getDownloadsDirectory();
+        if (dir != null) {
+          final file = File('${dir.path}/$filename');
+          await file.writeAsBytes(bytes, flush: true);
+          return file.path;
+        }
+      }
+    } catch (_) {
+      // Cae al almacenamiento interno de la app.
+    }
+    final fallback = await getApplicationDocumentsDirectory();
+    final file = File('${fallback.path}/$filename');
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
+  }
+
+  /// Descarga local + opción de compartir en un SnackBar.
+  Future<void> _deliverReport(
+    List<int> bytes,
+    String filename,
+    String shareText,
+  ) async {
+    final path = await _saveToDownloads(bytes, filename);
+    if (!mounted || path == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Guardado en: $path'),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Compartir',
+          onPressed: () => Share.shareXFiles([XFile(path)], text: shareText),
+        ),
+      ),
+    );
   }
 
   // Helpers para construir celdas del PDF
@@ -1461,115 +1457,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
               }),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAIInsightsPanel() {
-    if (aiInsights == null) {
-      return Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: const Text(
-          'Aún no hay insights generados. Presiona "Generar análisis con IA".',
-          style: TextStyle(
-            color: Color(0xFF64748B),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F0F172A),
-            blurRadius: 10,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.auto_awesome, color: Color(0xFF7C3AED)),
-              SizedBox(width: 8),
-              Text(
-                'Análisis con IA',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1E1B4B),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (aiInsights!['summary'] != null) ...[
-            const Text(
-              'Resumen',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(aiInsights!['summary'].toString()),
-            const SizedBox(height: 14),
-          ],
-          if (aiInsights!['patterns'] != null) ...[
-            const Text(
-              'Patrones detectados',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            ...((aiInsights!['patterns'] as List).map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('• '),
-                    Expanded(child: Text(item.toString())),
-                  ],
-                ),
-              ),
-            )),
-            const SizedBox(height: 12),
-          ],
-          if (aiInsights!['recommendations'] != null) ...[
-            const Text(
-              'Recomendaciones',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            ...((aiInsights!['recommendations'] as List).map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.lightbulb_outline,
-                      color: Color(0xFFF59E0B),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(item.toString())),
-                  ],
-                ),
-              ),
-            )),
-          ],
         ],
       ),
     );
@@ -2016,94 +1903,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     );
   }
 
-  Widget _buildPredictiveAnalysisCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFF0F172A), Color(0xFF1F2A8A)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x22FFFFFF)),
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        runAlignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 16,
-        runSpacing: 16,
-        children: [
-          const SizedBox(
-            width: 380,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Generar análisis predictivo',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'La IA analiza patrones de asistencia para identificar estudiantes que requieren intervención temprana.',
-                  style: TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: isLoading ? null : _generateAIInsights,
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.auto_awesome),
-            label: Text(
-              isLoading ? loadingMessage : 'Generar análisis con IA',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.disabled)) {
-                  return const Color(0xFFA855F7).withValues(alpha: 0.55);
-                }
-                if (states.contains(WidgetState.pressed)) {
-                  return const Color(0xFF7E22CE);
-                }
-                if (states.contains(WidgetState.hovered)) {
-                  return const Color(0xFF9333EA);
-                }
-                return const Color(0xFFA855F7);
-              }),
-              foregroundColor: const WidgetStatePropertyAll(Colors.white),
-              elevation: const WidgetStatePropertyAll(0),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              ),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDetailedListContent() {
     final raw = _asStringDynamicMap(overviewData?['raw']);
     final summaries = _asMapList(raw['studentSummaries']);
@@ -2201,16 +2000,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             }),
         ],
       ),
-    );
-  }
-
-  Widget _buildInsightsContent() {
-    return Column(
-      children: [
-        _buildPredictiveAnalysisCard(),
-        const SizedBox(height: 14),
-        _buildAIInsightsPanel(),
-      ],
     );
   }
 
@@ -2366,90 +2155,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     );
   }
 
-  Widget _buildTopGlassBar(BuildContext context, String subtitle) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: AppDesignSystem.getSpaceMD(context),
-            vertical: AppDesignSystem.getSpaceSM(context),
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.9),
-            border: Border(
-              bottom: BorderSide(
-                color: _outlineVariant.withValues(alpha: 0.55),
-                width: 1,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: _brandBlue,
-                backgroundImage:
-                    (_auth.currentUser?.photoURL?.isNotEmpty ?? false) &&
-                        Uri.tryParse(
-                              _auth.currentUser!.photoURL!,
-                            )?.hasAbsolutePath ==
-                            true
-                    ? NetworkImage(_auth.currentUser!.photoURL!)
-                    : null,
-                child:
-                    ((_auth.currentUser?.photoURL?.isNotEmpty ?? false) &&
-                        Uri.tryParse(
-                              _auth.currentUser!.photoURL!,
-                            )?.hasAbsolutePath ==
-                            true)
-                    ? null
-                    : const Icon(
-                        Icons.school_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-              ),
-              SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Asistencias',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: _brandBlue,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.4,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: _outline,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDashboardHeader(
     BuildContext context, {
     required String title,
@@ -2536,7 +2241,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _buildTopGlassBar(context, 'Centro de reportes'),
+            const AppGlassTopBar(subtitle: 'Centro de reportes'),
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -2583,11 +2288,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                               index: 1,
                               primaryColor: primaryColor,
                             ),
-                            _buildTabButton(
-                              label: 'Análisis IA',
-                              index: 2,
-                              primaryColor: primaryColor,
-                            ),
                           ],
                         ),
                       ),
@@ -2626,11 +2326,9 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                             );
                           }
 
-                          final tabContent = activeTab == 0
-                              ? _buildOverviewContent()
-                              : activeTab == 1
+                          final tabContent = activeTab == 1
                               ? _buildDetailedListContent()
-                              : _buildInsightsContent();
+                              : _buildOverviewContent();
 
                           final showExportSection = activeTab == 0;
 

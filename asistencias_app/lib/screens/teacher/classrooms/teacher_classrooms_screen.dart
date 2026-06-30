@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../models/classroom_model.dart';
 import '../../../theme/app_design_system.dart';
 import '../../../widgets/common/state_widgets.dart';
+import '../../../widgets/common/app_glass_top_bar.dart';
 import '../qr_attendance_realtime.dart';
 import 'classroom_detail_screen.dart';
 
@@ -174,13 +175,6 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     return keys[date.weekday - 1];
   }
 
-  DateTime _parseTimeOnDate(DateTime date, String hhmm) {
-    final parts = hhmm.split(':');
-    final hour = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0;
-    final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
-    return DateTime(date.year, date.month, date.day, hour, minute);
-  }
-
   ClassSchedule? _todaySchedule(ClassroomModel classroom) {
     final schedule = classroom.schedule;
     if (schedule == null || schedule.isEmpty) return null;
@@ -228,148 +222,36 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     return active;
   }
 
-  Widget _buildTopGlassBar(BuildContext context, String subtitle) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: AppDesignSystem.getSpaceMD(context),
-            vertical: AppDesignSystem.getSpaceSM(context),
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.9),
-            border: Border(
-              bottom: BorderSide(
-                color: _outlineVariant.withValues(alpha: 0.55),
-                width: 1,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: _brandBlue,
-                child: const Icon(
-                  Icons.school_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Asistencias',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: _brandBlue,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.4,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: _outline,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDashboardHeader(
     BuildContext context, {
     required String title,
-    required bool showLive,
   }) {
     return Padding(
       padding: AppDesignSystem.paddingSymmetric(
         context,
         horizontal: AppDesignSystem.spaceMD,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final maxWidth = constraints.maxWidth;
-              final titleSize = maxWidth < 360
-                  ? 30.0
-                  : maxWidth < 420
-                  ? 34.0
-                  : 40.0;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxWidth = constraints.maxWidth;
+          final titleSize = maxWidth < 360
+              ? 30.0
+              : maxWidth < 420
+              ? 34.0
+              : 40.0;
 
-              return Text(
-                title,
-                softWrap: true,
-                style: GoogleFonts.manrope(
-                  color: _brandBlue,
-                  fontSize: titleSize,
-                  height: 1.05,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.9,
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          if (showLive)
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _secondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1976D2),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'En vivo ahora',
-                        style: GoogleFonts.manrope(
-                          color: _secondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          return Text(
+            title,
+            softWrap: true,
+            style: GoogleFonts.manrope(
+              color: _brandBlue,
+              fontSize: titleSize,
+              height: 1.05,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.9,
             ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -520,7 +402,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                           openScheduleSettings: true,
                         ),
                         icon: const Icon(Icons.folder_open_rounded),
-                        label: const Text('Recursos'),
+                        label: const Text('Horario'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _secondary,
                           side: BorderSide(
@@ -695,7 +577,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                     openScheduleSettings: true,
                   ),
                   icon: const Icon(Icons.description_outlined, size: 18),
-                  label: const Text('Recursos'),
+                  label: const Text('Horario'),
                   style: FilledButton.styleFrom(
                     backgroundColor: _secondary.withValues(alpha: 0.1),
                     foregroundColor: _secondary,
@@ -857,60 +739,12 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
             .toList();
 
         final allClassrooms = _cachedClassrooms ?? [];
-        final activeClassrooms = _sortedActive(allClassrooms);
-
-        final now = DateTime.now();
-        final weekdayKey = _weekdayKey(now);
-        final todaysClassrooms = activeClassrooms
-            .where(
-              (classroom) =>
-                  classroom.schedule != null &&
-                  classroom.schedule!.containsKey(weekdayKey),
-            )
-            .toList();
-
-        final upcomingClassrooms =
-            todaysClassrooms.where((classroom) {
-              final schedule = classroom.schedule![weekdayKey]!;
-              return _parseTimeOnDate(now, schedule.startTime).isAfter(now);
-            }).toList()..sort((a, b) {
-              final aTime = _parseTimeOnDate(
-                now,
-                a.schedule![weekdayKey]!.startTime,
-              );
-              final bTime = _parseTimeOnDate(
-                now,
-                b.schedule![weekdayKey]!.startTime,
-              );
-              return aTime.compareTo(bTime);
-            });
-
-        ClassroomModel? liveClassroom;
-        for (final classroom in activeClassrooms) {
-          if (_isLiveNow(classroom)) {
-            liveClassroom = classroom;
-            break;
-          }
-        }
-
-        final nextClassroom = upcomingClassrooms.isNotEmpty
-            ? upcomingClassrooms.first
-            : null;
-
-        final featuredClassroom =
-            liveClassroom ??
-            nextClassroom ??
-            (activeClassrooms.isNotEmpty ? activeClassrooms.first : null);
-
-        final gridClassrooms = activeClassrooms
-            .where((classroom) => classroom.id != featuredClassroom?.id)
-            .take(3)
-            .toList();
+        final gridClassrooms = _sortedActive(allClassrooms);
 
         return Column(
           children: [
             if (!widget.showAppBar)
-              _buildTopGlassBar(context, 'Gestión de aulas'),
+              const AppGlassTopBar(subtitle: 'Gestión de aulas'),
             Expanded(
               child: Container(
                 decoration: const BoxDecoration(
@@ -922,42 +756,30 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                 ),
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    20,
+                    24,
+                    MediaQuery.of(context).padding.bottom + 80,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildDashboardHeader(
                         context,
                         title: 'Gestión de Aulas',
-                        showLive: featuredClassroom != null,
                       ),
                       const SizedBox(height: 18),
-                      if (featuredClassroom != null) ...[
-                        const SizedBox(height: 12),
-                        _buildFeaturedClassHtmlCard(context, featuredClassroom),
-                        const SizedBox(height: 24),
-                      ],
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final isCompact = constraints.maxWidth < 760;
                           if (gridClassrooms.isEmpty) {
-                            return Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: _outlineVariant.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              child: const Text(
-                                'No hay más aulas para mostrar.',
-                                style: TextStyle(
-                                  color: Color(0xFF5F6470),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                            return EmptyStateWidget(
+                              icon: Icons.class_,
+                              title: 'No hay aulas activas',
+                              message:
+                                  'No hay aulas activas para mostrar en este momento.',
+                              color: AppDesignSystem.infoColor,
                             );
                           }
 
@@ -1000,181 +822,6 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
           ],
         );
       },
-    );
-  }
-
-  Widget _buildFeaturedClassHtmlCard(
-    BuildContext context,
-    ClassroomModel classroom,
-  ) {
-    final scheduleText = _scheduleCaption(classroom);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _secondary.withValues(alpha: 0.15)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000D33),
-            blurRadius: 40,
-            offset: Offset(0, 16),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Icon(
-              Icons.school_rounded,
-              color: _secondary.withValues(alpha: 0.2),
-              size: 84,
-            ),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 780;
-
-              final info = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Siguiente Clase',
-                    style: TextStyle(
-                      color: _secondary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatClassName(classroom),
-                    style: TextStyle(
-                      color: _darkPrimary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: compact ? 38 : 42,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    classroom.name,
-                    style: const TextStyle(
-                      color: Color(0xFF5F6470),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 18,
-                    runSpacing: 8,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.schedule,
-                            color: _secondary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            scheduleText,
-                            style: const TextStyle(
-                              color: _darkPrimary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.group, color: _secondary, size: 20),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${classroom.capacity} Alumnos',
-                            style: const TextStyle(
-                              color: _darkPrimary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              );
-
-              final actions = Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => _openAttendanceForm(classroom),
-                    icon: const Icon(Icons.how_to_reg),
-                    label: const Text('Asistencia'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _darkPrimary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 22,
-                        vertical: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => _openClassroomDetail(
-                      classroom,
-                      openScheduleSettings: true,
-                    ),
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Recursos'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE6EBF2),
-                      foregroundColor: _darkPrimary,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
-                      ),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [info, const SizedBox(height: 18), actions],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(flex: 4, child: info),
-                  const SizedBox(width: 18),
-                  Expanded(flex: 3, child: actions),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -1294,8 +941,8 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
                     classroom,
                     openScheduleSettings: true,
                   ),
-                  icon: const Icon(Icons.folder, size: 18),
-                  label: const Text('Recursos'),
+                  icon: const Icon(Icons.calendar_today, size: 18),
+                  label: const Text('Horario'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF2F4F5),
                     foregroundColor: _darkPrimary,
@@ -1337,10 +984,7 @@ class _TeacherClassroomsScreenState extends State<TeacherClassroomsScreen>
     };
 
     final days = schedule.keys.map((k) => labels[k] ?? k).toList();
-    if (days.length <= 2) {
-      return days.join(', ');
-    }
-    return '${days.first}, ${days[1]}';
+    return days.length <= 3 ? days.join(', ') : '${days.first} – ${days.last}';
   }
 
   @override

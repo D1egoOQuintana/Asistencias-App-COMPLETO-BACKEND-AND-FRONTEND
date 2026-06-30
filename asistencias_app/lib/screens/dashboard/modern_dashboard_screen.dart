@@ -136,7 +136,6 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
 
     final isTeacher = user.role == UserRole.docente;
     final isMobile = MediaQuery.of(context).size.width < 600;
-    const primaryColor = Color(0xFF1565C0);
 
     final List<NavigationDestination> destinations = isTeacher
         ? const [
@@ -208,103 +207,17 @@ class _ModernDashboardScreenState extends State<ModernDashboardScreen>
             .toList(growable: false),
       ),
       bottomNavigationBar: isMobile
-          ? _buildModernBottomNavBar(
-              destinations: destinations,
-              primaryColor: primaryColor,
+          ? Obx(
+              () => NavigationBar(
+                selectedIndex: _currentIndex.value.clamp(
+                  0,
+                  destinations.length - 1,
+                ),
+                onDestinationSelected: _onTabTap,
+                destinations: destinations,
+              ),
             )
           : null,
-    );
-  }
-
-  /// Barra de navegación inferior corporativa Material 3.
-  Widget _buildModernBottomNavBar({
-    required List<NavigationDestination> destinations,
-    required Color primaryColor,
-  }) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 8,
-              offset: Offset(0, -2),
-            ),
-          ],
-        ),
-        child: Obx(
-          () => Row(
-            children: List.generate(destinations.length, (index) {
-              final destination = destinations[index];
-              final isSelected = _currentIndex.value == index;
-
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => _onTabTap(index),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? primaryColor.withValues(alpha: 0.14)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isSelected
-                                ? primaryColor.withValues(alpha: 0.32)
-                                : Colors.transparent,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconTheme(
-                              data: IconThemeData(
-                                size: 22,
-                                color: isSelected
-                                    ? primaryColor
-                                    : Colors.grey.shade500,
-                              ),
-                              child: destination.icon,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              destination.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: isSelected ? 12 : 11,
-                                fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: isSelected
-                                    ? primaryColor
-                                    : Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
     );
   }
 

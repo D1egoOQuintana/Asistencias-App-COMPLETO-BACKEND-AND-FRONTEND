@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -392,6 +393,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
       final alreadyExited =
           outcome == AttendanceScanOutcome.exitAlreadyRegistered;
 
+      HapticFeedback.lightImpact();
       setState(() {
         _lastScanMessage = alreadyExited
             ? 'Salida ya registrada: $studentName'
@@ -424,6 +426,7 @@ class _QRAttendanceRealtimeViewState extends State<_QRAttendanceRealtimeView>
       });
     } catch (e) {
       if (!mounted) return;
+      HapticFeedback.heavyImpact();
       setState(() {
         _lastScanMessage = 'Error: $e';
         _lastScanColor = Colors.red;

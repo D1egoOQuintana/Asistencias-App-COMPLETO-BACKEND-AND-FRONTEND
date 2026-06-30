@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Sistema de diseño centralizado para toda la aplicación
 /// Basado en Material Design 3 con paleta personalizada
 class AppDesignSystem {
+  /// Familia tipográfica global (Manrope), igual que el textTheme del tema.
+  static final String? fontFamily = GoogleFonts.manrope().fontFamily;
   // ============================================================================
   // PALETA DE COLORES - Material Design 3
   // ============================================================================
@@ -121,6 +124,7 @@ class AppDesignSystem {
   }
 
   static TextStyle displayLarge(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 32),
     fontWeight: FontWeight.bold,
     color: textPrimary,
@@ -128,6 +132,7 @@ class AppDesignSystem {
   );
 
   static TextStyle displayMedium(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 28),
     fontWeight: FontWeight.bold,
     color: textPrimary,
@@ -135,45 +140,60 @@ class AppDesignSystem {
   );
 
   static TextStyle headlineLarge(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 24),
     fontWeight: FontWeight.bold,
     color: textPrimary,
   );
 
   static TextStyle headlineMedium(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 20),
     fontWeight: FontWeight.w600,
     color: textPrimary,
   );
 
   static TextStyle titleLarge(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 18),
     fontWeight: FontWeight.w600,
     color: textPrimary,
   );
 
   static TextStyle titleMedium(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 16),
     fontWeight: FontWeight.w500,
     color: textPrimary,
   );
 
-  static TextStyle bodyLarge(BuildContext context) =>
-      TextStyle(fontSize: getFontSize(context, 16), color: textPrimary);
+  static TextStyle bodyLarge(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
+    fontSize: getFontSize(context, 16),
+    color: textPrimary,
+  );
 
-  static TextStyle bodyMedium(BuildContext context) =>
-      TextStyle(fontSize: getFontSize(context, 14), color: textPrimary);
+  static TextStyle bodyMedium(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
+    fontSize: getFontSize(context, 14),
+    color: textPrimary,
+  );
 
-  static TextStyle bodySmall(BuildContext context) =>
-      TextStyle(fontSize: getFontSize(context, 12), color: textSecondary);
+  static TextStyle bodySmall(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
+    fontSize: getFontSize(context, 12),
+    color: textSecondary,
+  );
 
   static TextStyle labelLarge(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 14),
     fontWeight: FontWeight.w500,
     color: textPrimary,
   );
 
   static TextStyle labelMedium(BuildContext context) => TextStyle(
+    fontFamily: fontFamily,
     fontSize: getFontSize(context, 12),
     fontWeight: FontWeight.w500,
     color: textSecondary,
