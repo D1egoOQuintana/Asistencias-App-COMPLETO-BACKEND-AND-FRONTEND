@@ -5,7 +5,6 @@ import '../../../services/classroom_service.dart';
 import '../../../services/teacher_service.dart';
 import '../../../theme/app_design_system.dart';
 import 'widgets/classroom_form_dialog.dart';
-import 'widgets/assign_teacher_dialog.dart';
 import 'widgets/schedule_config_dialog.dart';
 import '../widgets/admin_ui.dart';
 
@@ -143,13 +142,6 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
     showDialog<void>(
       context: context,
       builder: (_) => ClassroomFormDialog(classroom: c),
-    );
-  }
-
-  void _showAssignTeacher(ClassroomModel c) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => AssignTeacherDialog(classroom: c),
     );
   }
 
@@ -457,7 +449,6 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
                       teacherNamesByUid: teacherNamesByUid,
                       opStatus: _opStatus,
                       onEdit: _showEditDialog,
-                      onAssignTeacher: _showAssignTeacher,
                       onSchedule: _showSchedule,
                       onToggle: _confirmToggle,
                     )
@@ -467,7 +458,6 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
                       teacherNamesByUid: teacherNamesByUid,
                       opStatus: _opStatus,
                       onEdit: _showEditDialog,
-                      onAssignTeacher: _showAssignTeacher,
                       onSchedule: _showSchedule,
                       onToggle: _confirmToggle,
                     ),
@@ -627,7 +617,6 @@ class _ClassroomsWebTable extends StatelessWidget {
   final Map<String, String> teacherNamesByUid;
   final _OpStatus Function(ClassroomModel) opStatus;
   final void Function(ClassroomModel) onEdit;
-  final void Function(ClassroomModel) onAssignTeacher;
   final void Function(ClassroomModel) onSchedule;
   final void Function(ClassroomModel) onToggle;
 
@@ -636,7 +625,6 @@ class _ClassroomsWebTable extends StatelessWidget {
     required this.teacherNamesByUid,
     required this.opStatus,
     required this.onEdit,
-    required this.onAssignTeacher,
     required this.onSchedule,
     required this.onToggle,
   });
@@ -659,7 +647,6 @@ class _ClassroomsWebTable extends StatelessWidget {
             status: opStatus(e.value),
             isLast: e.key == classrooms.length - 1,
             onEdit: onEdit,
-            onAssignTeacher: onAssignTeacher,
             onSchedule: onSchedule,
             onToggle: onToggle,
           );
@@ -675,7 +662,6 @@ class _ClassroomTableRow extends StatefulWidget {
   final _OpStatus status;
   final bool isLast;
   final void Function(ClassroomModel) onEdit;
-  final void Function(ClassroomModel) onAssignTeacher;
   final void Function(ClassroomModel) onSchedule;
   final void Function(ClassroomModel) onToggle;
 
@@ -685,7 +671,6 @@ class _ClassroomTableRow extends StatefulWidget {
     required this.status,
     required this.isLast,
     required this.onEdit,
-    required this.onAssignTeacher,
     required this.onSchedule,
     required this.onToggle,
   });
@@ -802,7 +787,6 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
                     ),
                     _RowMenu(
                       isActive: c.isActive,
-                      onAssignTeacher: () => widget.onAssignTeacher(c),
                       onSchedule: () => widget.onSchedule(c),
                       onToggle: () => widget.onToggle(c),
                     ),
@@ -826,7 +810,6 @@ class _ClassroomsMobileList extends StatelessWidget {
   final Map<String, String> teacherNamesByUid;
   final _OpStatus Function(ClassroomModel) opStatus;
   final void Function(ClassroomModel) onEdit;
-  final void Function(ClassroomModel) onAssignTeacher;
   final void Function(ClassroomModel) onSchedule;
   final void Function(ClassroomModel) onToggle;
 
@@ -835,7 +818,6 @@ class _ClassroomsMobileList extends StatelessWidget {
     required this.teacherNamesByUid,
     required this.opStatus,
     required this.onEdit,
-    required this.onAssignTeacher,
     required this.onSchedule,
     required this.onToggle,
   });
@@ -914,12 +896,6 @@ class _ClassroomsMobileList extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         _MobileActionChip(
-                          label: 'Docente',
-                          icon: Icons.person_add_alt_1_rounded,
-                          onTap: () => onAssignTeacher(c),
-                        ),
-                        const SizedBox(width: 6),
-                        _MobileActionChip(
                           label: 'Horario',
                           icon: Icons.schedule_rounded,
                           onTap: () => onSchedule(c),
@@ -941,21 +917,21 @@ class _ClassroomsMobileList extends StatelessWidget {
 // SHARED WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Vista resumen del aula para el listado admin.
+/// Modelo de producto: tutor obligatorio + auxiliar opcional.
+/// Por debajo se sigue leyendo teacherUid + teacherUids (sin migración),
+/// pero la UI ya solo muestra esos dos roles.
 class _ClassroomTeacherInfo {
   final bool hasTeacher;
-  final bool isPolidocente;
-  final int count;
-  final String primaryName;
-  final List<String> assignedNames;
-  final List<String> additionalNames;
+  final bool hasAuxiliar;
+  final String tutorName;
+  final String? auxiliarName;
 
   const _ClassroomTeacherInfo({
     required this.hasTeacher,
-    required this.isPolidocente,
-    required this.count,
-    required this.primaryName,
-    required this.assignedNames,
-    required this.additionalNames,
+    required this.hasAuxiliar,
+    required this.tutorName,
+    required this.auxiliarName,
   });
 
   factory _ClassroomTeacherInfo.from(
@@ -974,39 +950,32 @@ class _ClassroomTeacherInfo {
       addUid(uid);
     }
 
-    final primaryUid = orderedUids.isNotEmpty ? orderedUids.first : null;
-    final storedPrimaryName = (classroom.teacherName ?? '').trim();
+    final tutorUid = orderedUids.isNotEmpty ? orderedUids.first : null;
+    final auxiliarUid = orderedUids.length > 1 ? orderedUids[1] : null;
+    final storedTutorName = (classroom.teacherName ?? '').trim();
 
-    String labelFor(String uid) {
-      if (uid == primaryUid && storedPrimaryName.isNotEmpty) {
-        return storedPrimaryName;
-      }
+    String labelFor(String uid, {String? storedName}) {
+      if (storedName != null && storedName.isNotEmpty) return storedName;
       return teacherNamesByUid[uid] ?? _shortUid(uid);
     }
 
-    final assignedNames = orderedUids.map(labelFor).toList();
-    final primaryName = assignedNames.isNotEmpty
-        ? assignedNames.first
-        : storedPrimaryName.isNotEmpty
-        ? storedPrimaryName
-        : 'Sin asignar';
+    final tutorName = tutorUid != null
+        ? labelFor(tutorUid, storedName: storedTutorName)
+        : (storedTutorName.isNotEmpty ? storedTutorName : 'Sin asignar');
+    final auxiliarName =
+        auxiliarUid != null ? labelFor(auxiliarUid) : null;
 
     return _ClassroomTeacherInfo(
-      hasTeacher: orderedUids.isNotEmpty || storedPrimaryName.isNotEmpty,
-      isPolidocente: classroom.isPolidocente || orderedUids.length > 1,
-      count: orderedUids.length,
-      primaryName: primaryName,
-      assignedNames: assignedNames,
-      additionalNames: assignedNames.length > 1
-          ? assignedNames.skip(1).toList()
-          : const [],
+      hasTeacher: tutorUid != null || storedTutorName.isNotEmpty,
+      hasAuxiliar: auxiliarUid != null,
+      tutorName: tutorName,
+      auxiliarName: auxiliarName,
     );
   }
 
-  String get countLabel => count == 1 ? '1 docente' : '$count docentes';
-  String get tooltip => assignedNames.isEmpty
-      ? primaryName
-      : 'Docentes asignados: ${assignedNames.join(', ')}';
+  String get tooltip => hasAuxiliar
+      ? 'Tutor: $tutorName\nAuxiliar: $auxiliarName'
+      : 'Tutor: $tutorName';
 }
 
 String _shortUid(String uid) {
@@ -1025,13 +994,10 @@ class _ClassroomTeacherCell extends StatelessWidget {
         ? AppDesignSystem.textPrimary
         : AppDesignSystem.warningColor;
     final chips = <Widget>[
-      if (info.isPolidocente)
-        const _TeacherMetaChip(label: 'Polidocente', emphasized: true),
-      if (info.count > 0) _TeacherMetaChip(label: info.countLabel),
-      if (info.additionalNames.isNotEmpty)
-        _TeacherMetaChip(label: info.additionalNames.first),
-      if (info.additionalNames.length > 1)
-        _TeacherMetaChip(label: '+${info.additionalNames.length - 1}'),
+      if (info.hasAuxiliar)
+        const _TeacherMetaChip(label: 'Con auxiliar', emphasized: true),
+      if (info.hasAuxiliar && info.auxiliarName != null)
+        _TeacherMetaChip(label: info.auxiliarName!),
     ];
 
     return Tooltip(
@@ -1055,7 +1021,7 @@ class _ClassroomTeacherCell extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  info.primaryName,
+                  info.tutorName,
                   style: AdminType.bodySm.copyWith(
                     color: color,
                     fontWeight: info.hasTeacher
@@ -1086,14 +1052,10 @@ class _MobileTeacherSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chips = <Widget>[
-      if (info.isPolidocente)
-        const _TeacherMetaChip(label: 'Polidocente', emphasized: true),
-      if (info.count > 0) _TeacherMetaChip(label: info.countLabel),
-      ...info.additionalNames
-          .take(2)
-          .map((name) => _TeacherMetaChip(label: name)),
-      if (info.additionalNames.length > 2)
-        _TeacherMetaChip(label: '+${info.additionalNames.length - 2}'),
+      if (info.hasAuxiliar)
+        const _TeacherMetaChip(label: 'Con auxiliar', emphasized: true),
+      if (info.hasAuxiliar && info.auxiliarName != null)
+        _TeacherMetaChip(label: info.auxiliarName!),
     ];
 
     return Padding(
@@ -1102,7 +1064,7 @@ class _MobileTeacherSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            info.hasTeacher ? info.primaryName : 'Sin docente',
+            info.hasTeacher ? info.tutorName : 'Sin tutor',
             style: TextStyle(
               fontSize: 12,
               color: info.hasTeacher
@@ -1217,18 +1179,17 @@ class _OpStatusChip extends StatelessWidget {
   }
 }
 
-/// Menú "⋯" que agrupa acciones secundarias del aula para reducir ruido en la
-/// fila. Conserva acciones reales: asignar docente, configurar horario y
-/// activar/desactivar.
+/// Menú "⋯" del aula. Acciones reales: configurar horario y activar/desactivar.
+/// La asignación de docentes se hace desde el formulario de edición (tutor +
+/// auxiliar), por lo que el ítem "Asignar docente" se removió para evitar
+/// dos flujos paralelos.
 class _RowMenu extends StatelessWidget {
   final bool isActive;
-  final VoidCallback onAssignTeacher;
   final VoidCallback onSchedule;
   final VoidCallback onToggle;
 
   const _RowMenu({
     required this.isActive,
-    required this.onAssignTeacher,
     required this.onSchedule,
     required this.onToggle,
   });
@@ -1252,8 +1213,6 @@ class _RowMenu extends StatelessWidget {
       ),
       onSelected: (v) {
         switch (v) {
-          case 'assign':
-            onAssignTeacher();
           case 'schedule':
             onSchedule();
           case 'toggle':
@@ -1261,20 +1220,6 @@ class _RowMenu extends StatelessWidget {
         }
       },
       itemBuilder: (_) => [
-        PopupMenuItem<String>(
-          value: 'assign',
-          child: Row(
-            children: [
-              const Icon(
-                Icons.person_add_alt_1_rounded,
-                size: 18,
-                color: AdminUi.neutralAction,
-              ),
-              const SizedBox(width: 10),
-              Text('Asignar docente', style: AdminType.bodySm),
-            ],
-          ),
-        ),
         PopupMenuItem<String>(
           value: 'schedule',
           child: Row(
