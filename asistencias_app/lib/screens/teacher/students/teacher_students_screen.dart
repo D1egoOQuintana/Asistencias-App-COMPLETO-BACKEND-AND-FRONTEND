@@ -8,11 +8,11 @@ import 'dart:convert';
 import '../../../providers/auth_provider.dart';
 import '../../../services/classroom_service.dart';
 import '../../../services/student_service.dart';
-import '../../../models/user_model.dart';
 import '../../../models/classroom_model.dart';
 import '../../../models/student_model.dart';
 import '../../../theme/app_design_system.dart';
 import '../../../widgets/common/app_feedback_dialog.dart';
+import '../../../widgets/common/app_glass_top_bar.dart';
 import 'teacher_create_student_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -39,8 +39,6 @@ class TeacherStudentsScreen extends StatefulWidget {
 class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     with AutomaticKeepAliveClientMixin {
   static const Color _brandBlue = Color(0xFF1976D2);
-  static const Color _outline = Color(0xFF5F6470);
-  static const Color _outlineVariant = Color(0xFFC5C6D2);
 
   ClassroomModel? _selectedClassroom;
   bool _initializedFromArgs = false;
@@ -145,12 +143,11 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
   Widget _buildModernStudentsHeader() {
     final classroomsCount = _cachedClassrooms?.length ?? 0;
-    final authUser = Provider.of<AuthProvider>(context, listen: false).user;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTopGlassBar(context, authUser, 'Centro de Alumnos'),
+        const AppGlassTopBar(subtitle: 'Centro de Alumnos'),
         Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -227,12 +224,11 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
 
   Widget _buildModernSelectedClassHeader(ClassroomModel classroom) {
     final classrooms = _cachedClassrooms ?? const <ClassroomModel>[];
-    final authUser = Provider.of<AuthProvider>(context, listen: false).user;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTopGlassBar(context, authUser, 'Centro de Alumnos'),
+        const AppGlassTopBar(subtitle: 'Centro de Alumnos'),
         Container(
           padding: const EdgeInsets.only(bottom: 14),
           decoration: const BoxDecoration(
@@ -249,76 +245,90 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
                 const SizedBox(height: 18),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    '${classroom.name} • ${classroom.grade}° ${classroom.section}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF64748B),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
-                      if (classrooms.length > 1) ...[
-                        Expanded(
-                          child: Container(
-                            height: 42,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: const Color(0xFFE2E8F0),
-                              ),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: classroom.id,
-                                isExpanded: true,
-                                icon: const Icon(
-                                  Icons.keyboard_arrow_down_rounded,
+                      Expanded(
+                        child: classrooms.length > 1
+                            ? Container(
+                                height: 42,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
                                 ),
-                                items: classrooms
-                                    .where((c) => c.id != null)
-                                    .map(
-                                      (c) => DropdownMenuItem<String>(
-                                        value: c.id,
-                                        child: Text(
-                                          '${c.grade}° ${c.section} · ${c.name}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: classroom.id,
+                                    isExpanded: true,
+                                    icon: const Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                    ),
+                                    items: classrooms
+                                        .where((c) => c.id != null)
+                                        .map(
+                                          (c) => DropdownMenuItem<String>(
+                                            value: c.id,
+                                            child: Text(
+                                              '${c.grade}° ${c.section} · ${c.name}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (newClassroomId) {
-                                  if (newClassroomId == null ||
-                                      newClassroomId == classroom.id) {
-                                    return;
-                                  }
-                                  final nextClassroom = classrooms.firstWhere(
-                                    (c) => c.id == newClassroomId,
-                                    orElse: () => classroom,
-                                  );
-                                  setState(() {
-                                    _selectedClassroom = nextClassroom;
-                                    _cachedStudents = null;
-                                  });
-                                },
+                                        )
+                                        .toList(),
+                                    onChanged: (newClassroomId) {
+                                      if (newClassroomId == null ||
+                                          newClassroomId == classroom.id) {
+                                        return;
+                                      }
+                                      final nextClassroom = classrooms
+                                          .firstWhere(
+                                            (c) => c.id == newClassroomId,
+                                            orElse: () => classroom,
+                                          );
+                                      setState(() {
+                                        _selectedClassroom = nextClassroom;
+                                        _cachedStudents = null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                height: 42,
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${classroom.grade}° ${classroom.section} · ${classroom.name}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF334155),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
+                      ),
+                      const SizedBox(width: 10),
                       ElevatedButton.icon(
                         onPressed: () => _showCreateStudentDialog(classroom),
                         icon: const Icon(Icons.person_add, size: 16),
@@ -346,78 +356,6 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
     );
   }
 
-  Widget _buildTopGlassBar(
-    BuildContext context,
-    UserModel? authUser,
-    String subtitle,
-  ) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: AppDesignSystem.getSpaceMD(context),
-            vertical: AppDesignSystem.getSpaceSM(context),
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.9),
-            border: Border(
-              bottom: BorderSide(
-                color: _outlineVariant.withValues(alpha: 0.55),
-                width: 1,
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: _brandBlue,
-                child: const Icon(
-                  Icons.school_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              SizedBox(width: AppDesignSystem.getSpaceSM(context)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Asistencias',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: _brandBlue,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.4,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        color: _outline,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildDashboardHeader(BuildContext context, {required String title}) {
     return Padding(
@@ -1458,31 +1396,6 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen>
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Align(
-              alignment: Alignment.center,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDBE1FF),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${classroom.grade}° ${classroom.section} - ${classroom.name}',
-                  style: GoogleFonts.manrope(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF2C4383),
-                  ),
-                ),
-              ),
-            ),
-          ),
           Row(
             children: [
               Expanded(

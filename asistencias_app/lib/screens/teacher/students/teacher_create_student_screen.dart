@@ -539,7 +539,7 @@ class _TeacherCreateStudentScreenState
                                 child: _buildField(
                                   label: 'Teléfono',
                                   controller: _parentPhoneCtrl,
-                                  hint: '+54 9 ... (opcional)',
+                                  hint: '+51 9 ... (opcional)',
                                   icon: Icons.call_outlined,
                                   keyboardType: TextInputType.phone,
                                 ),
@@ -576,6 +576,86 @@ class _TeacherCreateStudentScreenState
                                 ),
                               ],
                             ),
+                          ),
+                          const SizedBox(height: 24),
+                          FormField<bool>(
+                            initialValue: false,
+                            validator: (v) => (v ?? false)
+                                ? null
+                                : 'Debe aceptar el consentimiento de protección de datos para continuar',
+                            builder: (state) {
+                              final checked = state.value ?? false;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  InkWell(
+                                    onTap: () => state.didChange(!checked),
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Container(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        6,
+                                        6,
+                                        14,
+                                        6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: state.hasError
+                                              ? const Color(0xFFBA1A1A)
+                                              : const Color(0xFFE1E3E4),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Checkbox(
+                                            value: checked,
+                                            onChanged: state.didChange,
+                                            activeColor: _celesteDark,
+                                          ),
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 11,
+                                              ),
+                                              child: Text(
+                                                'Autorizo el tratamiento de los datos personales del estudiante conforme a la Ley N° 29733, Ley de Protección de Datos Personales, y su reglamento aprobado por Decreto Supremo N° 016-2024-JUS.',
+                                                style: GoogleFonts.workSans(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: const Color(
+                                                    0xFF444650,
+                                                  ),
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  if (state.hasError)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 12,
+                                        top: 6,
+                                      ),
+                                      child: Text(
+                                        state.errorText!,
+                                        style: GoogleFonts.workSans(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFFBA1A1A),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 24),
                           SizedBox(

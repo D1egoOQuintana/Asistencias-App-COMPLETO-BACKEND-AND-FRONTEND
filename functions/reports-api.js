@@ -428,14 +428,16 @@ exports.exportReportData = onCall(
       let attendances = attendancesSnapshot.docs
         .map(doc => {
           const data = doc.data();
-          // Buscar el campo de fecha - puede ser 'date', 'recordedAt' o 'timestamp'
-          const dateField = data.date || data.recordedAt || data.timestamp;
-          
-          if (!dateField || typeof dateField.toDate !== 'function') {
+          // El campo de fecha puede ser Timestamp (timestamp/recordedAt) o string 'yyyy-MM-dd' (date).
+          const tsField = data.timestamp || data.recordedAt || data.entryAt;
+          let tsDate = (tsField && typeof tsField.toDate === 'function')
+            ? tsField.toDate()
+            : (typeof data.date === 'string' ? new Date(`${data.date}T12:00:00`) : null);
+
+          if (!tsDate || isNaN(tsDate.getTime())) {
             console.warn(`⚠️ Documento ${doc.id} no tiene campo de fecha válido`);
             return null;
           }
-          const tsDate = dateField.toDate();
           return {
             id: doc.id,
             studentId: data.studentId,

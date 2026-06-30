@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -75,16 +76,8 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1976D2)),
+          textTheme: GoogleFonts.manropeTextTheme(ThemeData.light().textTheme),
         ),
-        // Bloquear textScaleFactor para mantener UI estable
-        builder: (context, child) {
-          return MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(1.0)),
-            child: child!,
-          );
-        },
         // Transición entre secciones: fade sobrio y rápido (evita el slide
         // pesado por defecto de GetX al cambiar de ruta).
         defaultTransition: Transition.fadeIn,

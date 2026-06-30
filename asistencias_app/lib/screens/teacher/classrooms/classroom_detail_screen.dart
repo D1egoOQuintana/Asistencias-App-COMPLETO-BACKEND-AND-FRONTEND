@@ -70,100 +70,99 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
   Widget build(BuildContext context) {
     final classroomId = widget.classroom.id;
 
-    return MediaQuery(
-      data: MediaQuery.of(
-        context,
-      ).copyWith(textScaler: const TextScaler.linear(1.0)),
-      child: Scaffold(
-        appBar: AppBar(title: Text(widget.classroom.fullName)),
-        body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: classroomId == null
-              ? null
-              : FirebaseFirestore.instance
-                    .collection('classrooms')
-                    .doc(classroomId)
-                    .snapshots(),
-          builder: (context, snapshot) {
-            final classroom = (snapshot.data != null && snapshot.data!.exists)
-                ? ClassroomModel.fromFirestore(snapshot.data!)
-                : (_classroomOverride ?? widget.classroom);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.classroom.fullName),
+        backgroundColor: ScheduleSettingsScreen.surfaceLow,
+        foregroundColor: ScheduleSettingsScreen.brandBlue,
+        elevation: 0,
+      ),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: classroomId == null
+            ? null
+            : FirebaseFirestore.instance
+                  .collection('classrooms')
+                  .doc(classroomId)
+                  .snapshots(),
+        builder: (context, snapshot) {
+          final classroom = (snapshot.data != null && snapshot.data!.exists)
+              ? ClassroomModel.fromFirestore(snapshot.data!)
+              : (_classroomOverride ?? widget.classroom);
 
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildScheduleList(classroom),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _attendanceActive
-                                ? _stopAttendanceSession
-                                : _startAttendanceSession,
-                            icon: Icon(
-                              _attendanceActive
-                                  ? Icons.stop_circle
-                                  : Icons.play_circle,
-                            ),
-                            label: Text(
-                              _attendanceActive
-                                  ? 'Finalizar sesión'
-                                  : 'Iniciar sesión',
-                            ),
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildScheduleList(classroom),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _attendanceActive
+                              ? _stopAttendanceSession
+                              : _startAttendanceSession,
+                          icon: Icon(
+                            _attendanceActive
+                                ? Icons.stop_circle
+                                : Icons.play_circle,
+                          ),
+                          label: Text(
+                            _attendanceActive
+                                ? 'Finalizar sesión'
+                                : 'Iniciar sesión',
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              _showEditAttendanceDialog(_selectedDay),
-                          icon: const Icon(Icons.edit_calendar),
-                          label: const Text('Editar'),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            _showEditAttendanceDialog(_selectedDay),
+                        icon: const Icon(Icons.edit_calendar),
+                        label: const Text('Editar'),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: TableCalendar(
-                      firstDay: DateTime(2020),
-                      lastDay: DateTime(2100),
-                      focusedDay: _focusedDay,
-                      selectedDayPredicate: (day) =>
-                          isSameDay(day, _selectedDay),
-                      onDaySelected: (selectedDay, focusedDay) {
-                        setState(() {
-                          _selectedDay = selectedDay;
-                          _focusedDay = focusedDay;
-                        });
-                        _loadAttendanceForDay(selectedDay);
-                      },
-                    ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: TableCalendar(
+                    firstDay: DateTime(2020),
+                    lastDay: DateTime(2100),
+                    focusedDay: _focusedDay,
+                    selectedDayPredicate: (day) => isSameDay(day, _selectedDay),
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
+                      _loadAttendanceForDay(selectedDay);
+                    },
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Escáner QR',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                _buildScannerExperience(),
-                const SizedBox(height: 12),
-                const Text(
-                  'Resumen del día',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                _buildDailyAttendanceList(classroom.id),
-              ],
-            );
-          },
-        ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Escáner QR',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildScannerExperience(),
+              const SizedBox(height: 12),
+              const Text(
+                'Resumen del día',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              _buildDailyAttendanceList(classroom.id),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1243,7 +1242,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
 
       final attendanceId = '${studentId}_$dateKey';
 
-        final attendanceRef = FirebaseFirestore.instance
+      final attendanceRef = FirebaseFirestore.instance
           .collection('classrooms')
           .doc(widget.classroom.id)
           .collection('attendance')
@@ -1457,9 +1456,9 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
     final dateKey =
         '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
     return FirebaseFirestore.instance
-      .collection('classrooms')
-      .doc(classroomId)
-      .collection('attendance')
+        .collection('classrooms')
+        .doc(classroomId)
+        .collection('attendance')
         .where('date', isEqualTo: dateKey)
         .snapshots();
   }
@@ -1702,7 +1701,6 @@ class ScheduleSettingsScreen extends StatefulWidget {
 
 class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
   final Map<String, Map<String, String>> _schedules = {};
-  bool _isLoading = false;
 
   final Map<String, String> _weekDays = const {
     'monday': 'Lunes',
@@ -1772,202 +1770,6 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
     return percentage.clamp(0, 100).round();
   }
 
-  TimeOfDay _parseTime(String hhmm) {
-    final parts = hhmm.split(':');
-    if (parts.length != 2) return const TimeOfDay(hour: 8, minute: 0);
-    return TimeOfDay(
-      hour: int.tryParse(parts[0]) ?? 8,
-      minute: int.tryParse(parts[1]) ?? 0,
-    );
-  }
-
-  String _timeLabel(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _editDaySchedule(String dayKey, String dayName) async {
-    final existing = _schedules[dayKey];
-    var enabled = existing != null;
-    var start = _parseTime(existing?['startTime'] ?? '08:00');
-    var end = _parseTime(existing?['endTime'] ?? '17:00');
-    var maxLate = _parseTime(existing?['maxLateTime'] ?? '08:15');
-
-    final changed = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: ScheduleSettingsScreen.surfaceLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            Future<void> pickTime(
-              TimeOfDay current,
-              ValueChanged<TimeOfDay> onPicked,
-            ) async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: current,
-              );
-              if (picked != null) {
-                setSheetState(() => onPicked(picked));
-              }
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 20,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            dayName,
-                            style: GoogleFonts.manrope(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: ScheduleSettingsScreen.brandBlue,
-                            ),
-                          ),
-                        ),
-                        Switch(
-                          value: enabled,
-                          onChanged: (value) {
-                            setSheetState(() => enabled = value);
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      enabled
-                          ? 'Configura el rango horario y la puntualidad.'
-                          : 'Activa para añadir horario a este día.',
-                      style: GoogleFonts.manrope(
-                        color: ScheduleSettingsScreen.outline,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    if (enabled) ...[
-                      _TimePickerTile(
-                        label: 'Hora de entrada',
-                        value: _timeLabel(start),
-                        icon: Icons.login_rounded,
-                        onTap: () =>
-                            pickTime(start, (picked) => start = picked),
-                      ),
-                      const SizedBox(height: 10),
-                      _TimePickerTile(
-                        label: 'Hora de salida',
-                        value: _timeLabel(end),
-                        icon: Icons.logout_rounded,
-                        onTap: () => pickTime(end, (picked) => end = picked),
-                      ),
-                      const SizedBox(height: 10),
-                      _TimePickerTile(
-                        label: 'Puntual hasta',
-                        value: _timeLabel(maxLate),
-                        icon: Icons.schedule,
-                        onTap: () =>
-                            pickTime(maxLate, (picked) => maxLate = picked),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => Navigator.of(sheetContext).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ScheduleSettingsScreen.brandBlue,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(52),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        icon: const Icon(Icons.check_circle_outline),
-                        label: const Text(
-                          'Aplicar cambios',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (changed != true || !mounted) return;
-
-    setState(() {
-      if (enabled) {
-        _schedules[dayKey] = {
-          'startTime': _timeLabel(start),
-          'endTime': _timeLabel(end),
-          'maxLateTime': _timeLabel(maxLate),
-        };
-      } else {
-        _schedules.remove(dayKey);
-      }
-    });
-  }
-
-  Future<void> _saveSchedules() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final Map<String, ClassSchedule> scheduleMap = {};
-      for (final entry in _schedules.entries) {
-        scheduleMap[entry.key] = ClassSchedule(
-          dayOfWeek: entry.key,
-          startTime: entry.value['startTime']!,
-          endTime: entry.value['endTime']!,
-          maxLateTime: entry.value['maxLateTime']!,
-        );
-      }
-
-      await FirebaseFirestore.instance
-          .collection('classrooms')
-          .doc(widget.classroom.id)
-          .update({
-            'schedule': scheduleMap.map(
-              (key, value) => MapEntry(key, value.toMap()),
-            ),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      if (mounted) {
-        Navigator.of(context).pop(true);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al guardar: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -1992,29 +1794,6 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
             fontSize: 24,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton.icon(
-              onPressed: _isLoading ? null : _saveSchedules,
-              style: FilledButton.styleFrom(
-                backgroundColor: ScheduleSettingsScreen.brandBlue,
-                foregroundColor: Colors.white,
-              ),
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: Text(_isLoading ? 'Guardando' : 'Guardar'),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         child: Container(
@@ -2032,7 +1811,7 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
             children: [
               Text(
-                'Configuración de Horarios',
+                'Horario del aula',
                 style: GoogleFonts.manrope(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
@@ -2041,7 +1820,7 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Define y gestiona los rangos operativos de la institución para el ciclo lectivo vigente.',
+                'Consulta los rangos horarios asignados a esta aula. Solo el administrador puede modificarlos.',
                 style: GoogleFonts.manrope(
                   fontSize: 15,
                   color: ScheduleSettingsScreen.outline,
@@ -2071,14 +1850,10 @@ class _ScheduleSettingsScreenState extends State<ScheduleSettingsScreen> {
                       maxLateTime: _formatHour(
                         schedule['maxLateTime'] ?? '08:15',
                       ),
-                      onEdit: () => _editDaySchedule(entry.key, entry.value),
                     );
                   }
 
-                  return _UnconfiguredDayCard(
-                    dayName: entry.value,
-                    onAdd: () => _editDaySchedule(entry.key, entry.value),
-                  );
+                  return _UnconfiguredDayCard(dayName: entry.value);
                 },
               ),
               const SizedBox(height: 16),
@@ -2101,14 +1876,12 @@ class _ConfiguredDayCard extends StatelessWidget {
   final String startTime;
   final String endTime;
   final String maxLateTime;
-  final VoidCallback onEdit;
 
   const _ConfiguredDayCard({
     required this.dayName,
     required this.startTime,
     required this.endTime,
     required this.maxLateTime,
-    required this.onEdit,
   });
 
   @override
@@ -2116,96 +1889,68 @@ class _ConfiguredDayCard extends StatelessWidget {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onEdit,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: const Border(
-              left: BorderSide(
-                width: 4,
-                color: ScheduleSettingsScreen.brandBlue,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: const Border(
+            left: BorderSide(width: 4, color: ScheduleSettingsScreen.brandBlue),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x12000000),
+              blurRadius: 16,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              dayName,
+              style: GoogleFonts.manrope(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: ScheduleSettingsScreen.outline,
+                letterSpacing: 0.8,
               ),
             ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x12000000),
-                blurRadius: 16,
-                offset: Offset(0, 6),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: ScheduleSettingsScreen.secondaryFixed,
+                borderRadius: BorderRadius.circular(999),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          dayName,
-                          style: GoogleFonts.manrope(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: ScheduleSettingsScreen.outline,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: ScheduleSettingsScreen.secondaryFixed,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            'Configurado',
-                            style: GoogleFonts.manrope(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: ScheduleSettingsScreen.brandBlue,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onEdit,
-                    icon: const Icon(
-                      Icons.edit,
-                      color: ScheduleSettingsScreen.brandBlue,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Text(
-                '$startTime - $endTime',
+              child: Text(
+                'Configurado',
                 style: GoogleFonts.manrope(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                   color: ScheduleSettingsScreen.brandBlue,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Puntual hasta: $maxLateTime',
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: ScheduleSettingsScreen.outline,
-                ),
+            ),
+            const Spacer(),
+            Text(
+              '$startTime - $endTime',
+              style: GoogleFonts.manrope(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: ScheduleSettingsScreen.brandBlue,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Puntual hasta: $maxLateTime',
+              style: GoogleFonts.manrope(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: ScheduleSettingsScreen.outline,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2214,9 +1959,8 @@ class _ConfiguredDayCard extends StatelessWidget {
 
 class _UnconfiguredDayCard extends StatelessWidget {
   final String dayName;
-  final VoidCallback onAdd;
 
-  const _UnconfiguredDayCard({required this.dayName, required this.onAdd});
+  const _UnconfiguredDayCard({required this.dayName});
 
   @override
   Widget build(BuildContext context) {
@@ -2247,26 +1991,6 @@ class _UnconfiguredDayCard extends StatelessWidget {
               fontStyle: FontStyle.italic,
               fontWeight: FontWeight.w600,
               color: ScheduleSettingsScreen.outline,
-            ),
-          ),
-          const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: onAdd,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ScheduleSettingsScreen.brandBlue,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(44),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: const Icon(Icons.add),
-              label: const Text(
-                'Añadir',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
             ),
           ),
         ],
@@ -2367,59 +2091,6 @@ class _SummaryItem extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TimePickerTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _TimePickerTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, color: ScheduleSettingsScreen.brandBlue),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: ScheduleSettingsScreen.outline,
-                  ),
-                ),
-              ),
-              Text(
-                value,
-                style: GoogleFonts.manrope(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: ScheduleSettingsScreen.brandBlue,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

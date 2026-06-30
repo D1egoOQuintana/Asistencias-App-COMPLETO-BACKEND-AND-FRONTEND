@@ -13,6 +13,7 @@ import '../../models/classroom_model.dart';
 import '../../models/user_model.dart';
 import '../teacher/classrooms/teacher_classrooms_screen.dart';
 import '../teacher/qr_attendance_realtime.dart';
+import '../../widgets/common/app_glass_top_bar.dart';
 
 /// Pantalla de inicio mejorada con diseño profesional y responsivo
 class ImprovedHomeScreen extends StatefulWidget {
@@ -95,27 +96,39 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
     return Theme(
       data: baseTheme.copyWith(textTheme: manropeTheme),
       child: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (user.role == UserRole.admin) ...[
-                  _buildModernWelcomeHeader(
-                    context,
-                    user,
-                    currentTime: _liveNow,
+        child: user.role == UserRole.admin
+            ? SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildModernWelcomeHeader(
+                        context,
+                        user,
+                        currentTime: _liveNow,
+                      ),
+                      const SizedBox(height: 32),
+                      _buildAdminDashboard(context),
+                    ],
                   ),
-                  const SizedBox(height: 32),
-                  _buildAdminDashboard(context),
-                ] else
-                  _buildTeacherDashboard(context, user.uid),
-              ],
-            ),
-          ),
-        ),
+                ),
+              )
+            : Column(
+                children: [
+                  const AppGlassTopBar(subtitle: 'Inicio'),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+                        child: _buildTeacherDashboard(context, user.uid),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -469,9 +482,6 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
             ? '${targetSchedule.startTime} - ${targetSchedule.endTime}'
             : targetSchedule.startTime;
 
-        final hour = now.hour.toString().padLeft(2, '0');
-        final minute = now.minute.toString().padLeft(2, '0');
-
         final greeting = now.hour < 12
             ? 'Buenos días'
             : now.hour < 18
@@ -488,113 +498,6 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFCFE3FF)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1976D2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.school_rounded,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, titleConstraints) {
-                            return SizedBox(
-                              width: titleConstraints.maxWidth,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: const Text(
-                                  'Asistencias',
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF0D47A1),
-                                    letterSpacing: -0.4,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFD8E8FF),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          firstName.isEmpty ? 'D' : firstName[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFF1976D2),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () => _showLogoutDialog(context),
-                        borderRadius: BorderRadius.circular(999),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF1F2),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFFFECACA)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.logout_rounded,
-                                color: Color(0xFFDC2626),
-                                size: 18,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Salir',
-                                style: TextStyle(
-                                  color: Color(0xFFDC2626),
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
                 Text(
                   '$greeting, $firstName!',
                   style: TextStyle(
@@ -625,27 +528,6 @@ class _ImprovedHomeScreenState extends State<ImprovedHomeScreen>
                         title: 'Aulas Totales',
                         value: '${classrooms.length}',
                         icon: Icons.hub,
-                      ),
-                    ),
-                    SizedBox(
-                      width: metricWidth,
-                      child: _buildTeacherBentoMetric(
-                        title: 'Activas Hoy',
-                        value: todaysScheduled.length.toString().padLeft(
-                          2,
-                          '0',
-                        ),
-                        icon: Icons.calendar_today,
-                        iconContainerColor: const Color(0xFFD8E8FF),
-                        iconColor: const Color(0xFF0D47A1),
-                      ),
-                    ),
-                    SizedBox(
-                      width: metricWidth,
-                      child: _buildTeacherBentoMetric(
-                        title: 'Hora Actual',
-                        value: '$hour:$minute',
-                        icon: Icons.schedule,
                       ),
                     ),
                     SizedBox(
