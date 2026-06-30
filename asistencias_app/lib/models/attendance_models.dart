@@ -6,10 +6,13 @@ enum AttendanceStatus { presente, tarde, ausente }
 AttendanceStatus statusFromString(String value) {
   switch (value.toLowerCase()) {
     case 'presente':
+    case 'present':
       return AttendanceStatus.presente;
     case 'tarde':
+    case 'late':
       return AttendanceStatus.tarde;
     case 'ausente':
+    case 'absent':
       return AttendanceStatus.ausente;
     default:
       return AttendanceStatus.presente;

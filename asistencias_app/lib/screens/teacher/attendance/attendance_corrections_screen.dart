@@ -21,6 +21,12 @@ class AttendanceCorrectionsScreen extends StatefulWidget {
 
 class _AttendanceCorrectionsScreenState
     extends State<AttendanceCorrectionsScreen> {
+  // Paleta alineada al resto de la app (students/reports).
+  static const Color _brandBlue = Color(0xFF1976D2);
+  static const Color _ink = Color(0xFF000D33);
+  static const Color _muted = Color(0xFF556474);
+  static const Color _border = Color(0xFFE1E3E4);
+
   final Set<String> _busyIds = <String>{};
   DateTime _selectedDay = DateTime.now();
 
@@ -170,7 +176,7 @@ class _AttendanceCorrectionsScreenState
         SnackBar(
           content: Text(
             hasExit
-                ? 'Salida removida para correccion.'
+                ? 'Salida removida para corrección.'
                 : 'Salida registrada manualmente.',
           ),
         ),
@@ -190,22 +196,49 @@ class _AttendanceCorrectionsScreenState
     }
   }
 
+  Widget _statusChip({
+    required String label,
+    required AttendanceStatus target,
+    required AttendanceStatus current,
+    required DocumentReference<Map<String, dynamic>> ref,
+    required String docId,
+    required bool isBusy,
+  }) {
+    final selected = current == target;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      selectedColor: _brandBlue,
+      backgroundColor: const Color(0xFFF0F4FF),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : _ink,
+        fontWeight: FontWeight.w700,
+      ),
+      side: BorderSide(color: selected ? _brandBlue : _border),
+      onSelected: isBusy
+          ? null
+          : (_) => _updateStatus(ref: ref, docId: docId, status: target),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F8FF),
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF0E2340),
+        foregroundColor: _brandBlue,
         title: const Text(
-          'Correccion de asistencias',
-          style: TextStyle(fontWeight: FontWeight.w800, fontFamily: 'Manrope'),
+          'Corrección de asistencias',
+          style: TextStyle(fontWeight: FontWeight.w800),
         ),
         actions: [
           IconButton(
             tooltip: 'Notificar ausentes',
+            color: _brandBlue,
             onPressed: _openAbsenteesNotifier,
             icon: const Icon(Icons.notifications_active_rounded),
           ),
@@ -216,19 +249,16 @@ class _AttendanceCorrectionsScreenState
           Container(
             width: double.infinity,
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F2747), Color(0xFF1F4E84)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x22000000),
-                  blurRadius: 18,
-                  offset: Offset(0, 10),
+                  color: Color(0x0F000D33),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
@@ -240,33 +270,35 @@ class _AttendanceCorrectionsScreenState
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'Manrope',
+                    color: _brandBlue,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       child: Text(
                         'Fecha: ${_formatShortDate(_selectedDay)}',
                         style: const TextStyle(
-                          color: Color(0xFFD9E9FF),
-                          fontFamily: 'WorkSans',
+                          color: _muted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                    TextButton.icon(
+                    ElevatedButton.icon(
                       onPressed: _pickDate,
-                      style: TextButton.styleFrom(
+                      style: ElevatedButton.styleFrom(
                         foregroundColor: Colors.white,
-                        backgroundColor: Colors.white.withValues(alpha: 0.14),
+                        backgroundColor: _brandBlue,
+                        elevation: 0,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                       icon: const Icon(Icons.calendar_month_rounded, size: 18),
@@ -287,10 +319,7 @@ class _AttendanceCorrectionsScreenState
 
                 if (snapshot.hasError) {
                   return const Center(
-                    child: Text(
-                      'No se pudo cargar la asistencia del dia.',
-                      style: TextStyle(fontFamily: 'WorkSans'),
-                    ),
+                    child: Text('No se pudo cargar la asistencia del día.'),
                   );
                 }
 
@@ -312,11 +341,10 @@ class _AttendanceCorrectionsScreenState
                     child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: 24),
                       child: Text(
-                        'No hay registros para esta fecha.\nEscanea QR primero y luego corrige aqui si hace falta.',
+                        'No hay registros para esta fecha.\nEscanea QR primero y luego corrige aquí si hace falta.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Color(0xFF4E5B73),
-                          fontFamily: 'WorkSans',
+                          color: _muted,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -344,12 +372,12 @@ class _AttendanceCorrectionsScreenState
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFDCE7F7)),
+                        border: Border.all(color: _border),
                         boxShadow: const [
                           BoxShadow(
-                            color: Color(0x14000000),
-                            blurRadius: 12,
-                            offset: Offset(0, 6),
+                            color: Color(0x0F000D33),
+                            blurRadius: 10,
+                            offset: Offset(0, 3),
                           ),
                         ],
                       ),
@@ -360,14 +388,14 @@ class _AttendanceCorrectionsScreenState
                             children: [
                               CircleAvatar(
                                 radius: 20,
-                                backgroundColor: const Color(0xFFE8F1FF),
+                                backgroundColor: const Color(0xFFD4E4F6),
                                 child: Text(
                                   (studentName.isNotEmpty
                                           ? studentName
                                           : studentId)[0]
                                       .toUpperCase(),
                                   style: const TextStyle(
-                                    color: Color(0xFF1D4F87),
+                                    color: Color(0xFF2C4383),
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
@@ -384,16 +412,14 @@ class _AttendanceCorrectionsScreenState
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                        fontFamily: 'Manrope',
                                         fontWeight: FontWeight.w800,
-                                        color: Color(0xFF10233E),
+                                        color: _ink,
                                       ),
                                     ),
                                     Text(
                                       'ID: $studentId',
                                       style: const TextStyle(
-                                        fontFamily: 'WorkSans',
-                                        color: Color(0xFF4E5B73),
+                                        color: _muted,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -406,16 +432,15 @@ class _AttendanceCorrectionsScreenState
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF0F6FF),
+                                  color: const Color(0xFFE0E7FF),
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
                                   'Entrada ${_formatTime(data['entryAt'] as Timestamp?)}',
                                   style: const TextStyle(
-                                    fontFamily: 'WorkSans',
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFF2B4770),
+                                    color: _brandBlue,
                                   ),
                                 ),
                               ),
@@ -426,38 +451,29 @@ class _AttendanceCorrectionsScreenState
                             spacing: 8,
                             runSpacing: 8,
                             children: [
-                              ChoiceChip(
-                                label: const Text('Presente'),
-                                selected: status == AttendanceStatus.presente,
-                                onSelected: isBusy
-                                    ? null
-                                    : (_) => _updateStatus(
-                                        ref: doc.reference,
-                                        docId: doc.id,
-                                        status: AttendanceStatus.presente,
-                                      ),
+                              _statusChip(
+                                label: 'Presente',
+                                target: AttendanceStatus.presente,
+                                current: status,
+                                ref: doc.reference,
+                                docId: doc.id,
+                                isBusy: isBusy,
                               ),
-                              ChoiceChip(
-                                label: const Text('Tarde'),
-                                selected: status == AttendanceStatus.tarde,
-                                onSelected: isBusy
-                                    ? null
-                                    : (_) => _updateStatus(
-                                        ref: doc.reference,
-                                        docId: doc.id,
-                                        status: AttendanceStatus.tarde,
-                                      ),
+                              _statusChip(
+                                label: 'Tarde',
+                                target: AttendanceStatus.tarde,
+                                current: status,
+                                ref: doc.reference,
+                                docId: doc.id,
+                                isBusy: isBusy,
                               ),
-                              ChoiceChip(
-                                label: const Text('Ausente'),
-                                selected: status == AttendanceStatus.ausente,
-                                onSelected: isBusy
-                                    ? null
-                                    : (_) => _updateStatus(
-                                        ref: doc.reference,
-                                        docId: doc.id,
-                                        status: AttendanceStatus.ausente,
-                                      ),
+                              _statusChip(
+                                label: 'Ausente',
+                                target: AttendanceStatus.ausente,
+                                current: status,
+                                ref: doc.reference,
+                                docId: doc.id,
+                                isBusy: isBusy,
                               ),
                             ],
                           ),
@@ -470,10 +486,9 @@ class _AttendanceCorrectionsScreenState
                                       ? 'Salida: ${_formatTime(data['exitAt'] as Timestamp?)}'
                                       : 'Salida pendiente',
                                   style: TextStyle(
-                                    fontFamily: 'WorkSans',
                                     fontWeight: FontWeight.w700,
                                     color: hasExit
-                                        ? const Color(0xFF1E6E50)
+                                        ? const Color(0xFF1DA056)
                                         : const Color(0xFF8A5C22),
                                   ),
                                 ),
@@ -486,6 +501,9 @@ class _AttendanceCorrectionsScreenState
                                         docId: doc.id,
                                         hasExit: hasExit,
                                       ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: _brandBlue,
+                                ),
                                 icon: Icon(
                                   hasExit
                                       ? Icons.remove_circle_outline_rounded
