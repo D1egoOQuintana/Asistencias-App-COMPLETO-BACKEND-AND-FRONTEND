@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
@@ -60,7 +59,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   static const Color _secondary = Color(0xFF1976D2);
 
   final _firestore = FirebaseFirestore.instance;
-  final _functions = FirebaseFunctions.instance;
   final _auth = FirebaseAuth.instance;
 
   String? selectedClassroomId;
@@ -319,7 +317,31 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     return display.isNotEmpty ? display : (user?.email ?? 'N/A');
   }
 
-  /// Obtener datos de asistencia usando la API profesional del backend
+  /// Normaliza el estado a la forma canónica en inglés que esperan los reportes.
+  /// La app guarda 'present/late/absent' (QR) pero correcciones guardan
+  /// 'presente/tarde/ausente'; aquí se unifican para que los conteos cuadren.
+  String _normalizeStatus(dynamic raw) {
+    switch ((raw ?? '').toString().toLowerCase()) {
+      case 'present':
+      case 'presente':
+        return 'present';
+      case 'late':
+      case 'tarde':
+        return 'late';
+      case 'absent':
+      case 'ausente':
+        return 'absent';
+      case 'justified':
+      case 'justificado':
+      case 'justificada':
+        return 'justified';
+      default:
+        return (raw ?? '').toString().toLowerCase();
+    }
+  }
+
+  /// Lee la asistencia desde la subcolección donde la app realmente escribe
+  /// (classrooms/{id}/attendance). No depende de Cloud Functions ni del sync.
   Future<Map<String, dynamic>> _getAttendanceData({
     DateTime? customStart,
     DateTime? customEnd,
@@ -327,150 +349,111 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
     final startDateToUse = customStart ?? startDate;
     final endDateToUse = customEnd ?? endDate;
 
-    print('🔍 Obteniendo datos de asistencia:');
-    print('   Aula: $selectedClassroomId');
-    print(
-      '   Inicio: ${DateFormat('dd/MM/yyyy HH:mm').format(startDateToUse)}',
-    );
-    print('   Fin: ${DateFormat('dd/MM/yyyy HH:mm').format(endDateToUse)}');
+    final attendanceSnapshot = await _firestore
+        .collection('classrooms')
+        .doc(selectedClassroomId)
+        .collection('attendance')
+        .get();
 
-    try {
-      // Llamar a la función de backend para obtener datos estructurados
-      final result = await _functions.httpsCallable('exportReportData').call({
-        'classroomId': selectedClassroomId,
-        'startDate': startDateToUse.toIso8601String(),
-        'endDate': endDateToUse.toIso8601String(),
-        'format': 'structured',
-      });
+    final studentsSnapshot = await _firestore
+        .collection('students')
+        .where('classroomId', isEqualTo: selectedClassroomId)
+        .get();
 
-      if (result.data['success'] == true) {
-        // Convertir explícitamente los datos a Map<String, dynamic>
-        final data = result.data['data'];
-        final resultData = Map<String, dynamic>.from(data as Map);
+    final records = attendanceSnapshot.docs
+        .map((doc) {
+          final data = doc.data();
 
-        return resultData;
-      } else {
-        throw Exception('Error en respuesta del servidor');
-      }
-    } catch (e) {
-      // Fallback: obtener datos directamente de Firestore
-      print('⚠️ Usando fallback para obtener datos: $e');
-      // Obtener todas las asistencias del aula y filtrar por fecha en memoria
-      final attendanceSnapshot = await _firestore
-          .collection('attendance')
-          .where('classroomId', isEqualTo: selectedClassroomId)
-          .get();
+          // Fecha: timestamp/entryAt (Timestamp) o, si falta, el string 'date'.
+          DateTime timestampDate;
+          final tsRaw = data['timestamp'] ?? data['entryAt'];
+          if (tsRaw is Timestamp) {
+            timestampDate = tsRaw.toDate();
+          } else if (tsRaw is String) {
+            timestampDate = DateTime.tryParse(tsRaw) ?? DateTime.now();
+          } else if (data['date'] is String) {
+            timestampDate =
+                DateTime.tryParse('${data['date']}T12:00:00') ?? DateTime.now();
+          } else {
+            timestampDate = DateTime.now();
+          }
 
-      final studentsSnapshot = await _firestore
-          .collection('students')
-          .where('classroomId', isEqualTo: selectedClassroomId)
-          .get();
+          return {
+            'id': doc.id,
+            'studentId': data['studentId'],
+            'studentName': data['studentName'] ?? 'N/A',
+            'status': _normalizeStatus(data['status']),
+            'date': DateFormat('dd/MM/yyyy').format(timestampDate),
+            'time': DateFormat('HH:mm').format(timestampDate),
+            'timestamp': timestampDate,
+            'method': data['method'] ?? 'manual',
+            'notes': data['notes'] ?? '',
+          };
+        })
+        .where((record) {
+          final timestamp = record['timestamp'] as DateTime;
+          return timestamp.isAfter(
+                startDateToUse.subtract(const Duration(days: 1)),
+              ) &&
+              timestamp.isBefore(endDateToUse.add(const Duration(days: 1)));
+        })
+        .map((record) {
+          return {
+            ...record,
+            'timestamp': (record['timestamp'] as DateTime).toIso8601String(),
+          };
+        })
+        .toList();
 
-      // Filtrar por fecha en memoria
-      final records = attendanceSnapshot.docs
-          .map((doc) {
-            final data = doc.data();
+    final students = studentsSnapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList();
 
-            // Safe timestamp parsing
-            DateTime timestampDate;
-            if (data['timestamp'] != null) {
-              if (data['timestamp'] is Timestamp) {
-                timestampDate = (data['timestamp'] as Timestamp).toDate();
-              } else if (data['timestamp'] is String) {
-                timestampDate =
-                    DateTime.tryParse(data['timestamp'].toString()) ??
-                    DateTime.now();
-              } else {
-                timestampDate = DateTime.now();
-              }
-            } else {
-              timestampDate = DateTime.now();
-            }
-
-            return {
-              'id': doc.id,
-              'studentId': data['studentId'],
-              'studentName': data['studentName'] ?? 'N/A',
-              'status': data['status'],
-              'date': DateFormat('dd/MM/yyyy').format(timestampDate),
-              'time': DateFormat('HH:mm').format(timestampDate),
-              'timestamp': timestampDate,
-              'method': data['method'] ?? 'manual',
-              'notes': data['notes'] ?? '',
-            };
-          })
-          .where((record) {
-            final timestamp = record['timestamp'] as DateTime;
-            return timestamp.isAfter(
-                  startDateToUse.subtract(const Duration(days: 1)),
-                ) &&
-                timestamp.isBefore(endDateToUse.add(const Duration(days: 1)));
-          })
-          .map((record) {
-            // Convertir timestamp a string para el resultado final
-            return {
-              ...record,
-              'timestamp': (record['timestamp'] as DateTime).toIso8601String(),
-            };
-          })
+    final studentSummaries = students.map((student) {
+      final studentAttendances = records
+          .where((r) => r['studentId'] == student['id'])
           .toList();
-
-      final students = studentsSnapshot.docs
-          .map((doc) => {'id': doc.id, ...doc.data()})
-          .toList();
-
-      // Calcular resumen por estudiante
-      final studentSummaries = students.map((student) {
-        final studentAttendances = records
-            .where((r) => r['studentId'] == student['id'])
-            .toList();
-        final present = studentAttendances
-            .where((a) => a['status'] == 'present')
-            .length;
-        final absent = studentAttendances
-            .where((a) => a['status'] == 'absent')
-            .length;
-        final late = studentAttendances
-            .where((a) => a['status'] == 'late')
-            .length;
-        final justified = studentAttendances
-            .where((a) => a['status'] == 'justified')
-            .length;
-        final total = studentAttendances.length;
-        final attendanceRate = total > 0
-            ? ((present + late) / total * 100).toStringAsFixed(2)
-            : '0.00';
-
-        return {
-          'studentId': student['id'],
-          'studentName':
-              '${student['lastName'] ?? ''}, ${student['firstName'] ?? ''}',
-          'dni': student['dni'] ?? '',
-          'totalClasses': total,
-          'present': present,
-          'absent': absent,
-          'late': late,
-          'justified': justified,
-          'attendanceRate': '$attendanceRate%',
-        };
-      }).toList();
-
-      print('📝 Fallback - Datos procesados:');
-      print('   Asistencias filtradas: ${records.length}');
-      print('   Estudiantes: ${students.length}');
-      print('   Resúmenes de estudiantes: ${studentSummaries.length}');
+      final present = studentAttendances
+          .where((a) => a['status'] == 'present')
+          .length;
+      final absent = studentAttendances
+          .where((a) => a['status'] == 'absent')
+          .length;
+      final late = studentAttendances
+          .where((a) => a['status'] == 'late')
+          .length;
+      final justified = studentAttendances
+          .where((a) => a['status'] == 'justified')
+          .length;
+      final total = studentAttendances.length;
+      final attendanceRate = total > 0
+          ? ((present + late) / total * 100).toStringAsFixed(2)
+          : '0.00';
 
       return {
-        'metadata': {'totalRecords': records.length},
-        'summary': {
-          'totalStudents': students.length,
-          'totalClasses': records.length,
-        },
-        'studentSummaries': studentSummaries,
-        'attendances': records,
-        'students': students,
+        'studentId': student['id'],
+        'studentName':
+            '${student['lastName'] ?? ''}, ${student['firstName'] ?? ''}',
+        'dni': student['dni'] ?? '',
+        'totalClasses': total,
+        'present': present,
+        'absent': absent,
+        'late': late,
+        'justified': justified,
+        'attendanceRate': '$attendanceRate%',
       };
-    }
+    }).toList();
+
+    return {
+      'metadata': {'totalRecords': records.length},
+      'summary': {
+        'totalStudents': students.length,
+        'totalClasses': records.length,
+      },
+      'studentSummaries': studentSummaries,
+      'attendances': records,
+      'students': students,
+    };
   }
 
   Future<void> _generateExcelReport() async {
@@ -742,13 +725,17 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
           'Asistencia_UGEL06_${monthName.replaceAll(' ', '_')}.xlsx';
       final excelBytes = excel.encode();
 
-      if (excelBytes != null) {
-        await _deliverReport(
-          excelBytes,
-          filename,
-          'Reporte de Asistencia UGEL 06',
-        );
+      if (excelBytes == null) {
+        _setStateIfMounted(() => isLoading = false);
+        _showError('No se pudo generar el archivo Excel.');
+        return;
       }
+
+      await _deliverReport(
+        excelBytes,
+        filename,
+        'Reporte de Asistencia UGEL 06',
+      );
 
       _setStateIfMounted(() => isLoading = false);
       _showSuccess('Reporte Excel descargado');
@@ -1023,28 +1010,31 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   // ponytail: ruta pública directa de Descargas; en Android 13+ el scoped storage
   // puede bloquearla → cae a getApplicationDocumentsDirectory (igual local, visible en Archivos).
   Future<String?> _saveToDownloads(List<int> bytes, String filename) async {
+    Directory? target;
     try {
       if (Platform.isAndroid) {
-        await Permission.storage.request();
-        final dir = Directory('/storage/emulated/0/Download');
-        if (await dir.exists()) {
-          final file = File('${dir.path}/$filename');
-          await file.writeAsBytes(bytes, flush: true);
-          return file.path;
+        // Intento 1: carpeta pública Descargas (funciona en Android <=12).
+        final pub = Directory('/storage/emulated/0/Download');
+        if (await pub.exists()) {
+          try {
+            await Permission.storage.request();
+            final f = File('${pub.path}/$filename');
+            await f.writeAsBytes(bytes, flush: true);
+            return f.path;
+          } catch (_) {
+            // Android 13+ con scoped storage: usar dir externo de la app.
+          }
         }
+        // Dir externo de la app: sin permiso y visible en Archivos.
+        target = await getExternalStorageDirectory();
       } else {
-        final dir = await getDownloadsDirectory();
-        if (dir != null) {
-          final file = File('${dir.path}/$filename');
-          await file.writeAsBytes(bytes, flush: true);
-          return file.path;
-        }
+        target = await getDownloadsDirectory();
       }
     } catch (_) {
       // Cae al almacenamiento interno de la app.
     }
-    final fallback = await getApplicationDocumentsDirectory();
-    final file = File('${fallback.path}/$filename');
+    target ??= await getApplicationDocumentsDirectory();
+    final file = File('${target.path}/$filename');
     await file.writeAsBytes(bytes, flush: true);
     return file.path;
   }
