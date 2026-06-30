@@ -44,13 +44,16 @@ class ClassroomService {
       }
 
       // Crear el salón
+      final effectiveTeacherUid = teacherUid ?? currentUser.uid;
       final classroom = ClassroomModel(
         name: name,
         grade: grade,
         section: section,
         capacity: capacity,
         description: description,
-        teacherUid: teacherUid ?? currentUser.uid,
+        teacherUid: effectiveTeacherUid,
+        teacherUids: [effectiveTeacherUid],
+        isPolidocente: false,
         teacherName: teacherName,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -148,7 +151,7 @@ class ClassroomService {
     String? teacherName,
   }) async {
     try {
-      await _firestore.collection('classrooms').doc(classroomId).update({
+      final update = <String, dynamic>{
         'name': name,
         'grade': grade,
         'section': section,
@@ -157,7 +160,13 @@ class ClassroomService {
         'teacherUid': teacherUid,
         'teacherName': teacherName,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
-      });
+      };
+      // Sincroniza teacherUids cuando el aula no es polidocente.
+      // No tocar si ya existe lógica polidocente real (futura Fase D).
+      if (teacherUid != null && teacherUid.isNotEmpty) {
+        update['teacherUids'] = [teacherUid];
+      }
+      await _firestore.collection('classrooms').doc(classroomId).update(update);
       return true;
     } catch (e) {
       print('Error updating classroom: $e');
@@ -268,6 +277,7 @@ class ClassroomService {
     try {
       await _firestore.collection('classrooms').doc(classroomId).update({
         'teacherUid': teacherUid,
+        'teacherUids': [teacherUid],
         'teacherName': teacherName,
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });

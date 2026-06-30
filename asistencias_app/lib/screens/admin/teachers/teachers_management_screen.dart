@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/auth_provider.dart' as AppAuthProvider;
 import '../../../themes/app_themes.dart';
-import '../../../services/admin_service_final.dart';
+import '../../../services/admin_service.dart';
 import '../../../widgets/common/app_feedback_dialog.dart';
 
 /// Pantalla para gestión de docentes (solo admin)

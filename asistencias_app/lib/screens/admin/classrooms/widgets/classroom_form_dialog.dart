@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../models/classroom_model.dart';
 import '../../../../services/classroom_service.dart';
+import '../../../../services/teacher_service.dart';
 import '../../../../theme/app_design_system.dart';
 import '../../widgets/admin_ui.dart';
 
@@ -31,6 +33,11 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
   static const _grades = ['1', '2', '3', '4', '5', '6'];
   static const _sections = ['A', 'B', 'C', 'D', 'E'];
 
+  // Docente seleccionado (obligatorio). En edición arranca con el actual.
+  String? _teacherUid;
+  String? _teacherName;
+  late final Stream<QuerySnapshot> _teachersStream;
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +48,20 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
     _capacity = TextEditingController(
       text: c != null ? c.capacity.toString() : '',
     );
+    _teacherUid = c?.teacherUid;
+    _teacherName = c?.teacherName;
+    _teachersStream = TeacherService.getTeachersStream();
+  }
+
+  String _displayName(Map<String, dynamic> d) {
+    final fn = (d['firstName'] ?? '').toString().trim();
+    final ln = (d['lastName'] ?? '').toString().trim();
+    final full = (d['fullName'] ?? '').toString().trim();
+    final email = (d['email'] ?? '').toString().trim();
+    final composed = '$fn $ln'.trim();
+    if (composed.isNotEmpty) return composed;
+    if (full.isNotEmpty) return full;
+    return email;
   }
 
   @override
@@ -54,6 +75,15 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_teacherUid == null || _teacherUid!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        AdminFeedback.snack(
+          AdminFeedbackType.error,
+          'Selecciona un docente para el aula',
+        ),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
 
     final name = _name.text.trim();
@@ -73,8 +103,8 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
           section: section,
           capacity: capacity,
           description: widget.classroom!.description,
-          teacherUid: widget.classroom!.teacherUid,
-          teacherName: widget.classroom!.teacherName,
+          teacherUid: _teacherUid,
+          teacherName: _teacherName,
         );
         message = ok ? 'Aula actualizada correctamente' : 'Error al actualizar el aula';
       } else {
@@ -84,6 +114,8 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
           section: section,
           capacity: capacity,
           description: 'Aula creada por administrador',
+          teacherUid: _teacherUid,
+          teacherName: _teacherName,
         );
         ok = result['success'] == true;
         message = result['message'] ?? (ok ? 'Aula creada correctamente' : 'Error al crear el aula');
@@ -224,7 +256,9 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
                 ),
                 const SizedBox(height: 24),
 
-                // Note on teacher/schedule
+                // Docente asignado (obligatorio)
+                _buildTeacherDropdown(),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
@@ -239,7 +273,7 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'La asignación de docente y el horario se configuran por separado desde la tabla.',
+                          'El horario se configura por separado desde la tabla.',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppDesignSystem.primaryColor,
@@ -321,6 +355,86 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
           .toList(),
       onChanged: (v) {
         if (v != null) controller.text = v;
+      },
+    );
+  }
+
+  Widget _buildTeacherDropdown() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _teachersStream,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          );
+        }
+        final docs = snap.data?.docs ?? const [];
+        if (docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppDesignSystem.warningColor.withValues(alpha: 0.06),
+              borderRadius: AppDesignSystem.borderRadiusMD,
+              border: Border.all(
+                color: AppDesignSystem.warningColor.withValues(alpha: 0.3),
+              ),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 16, color: AppDesignSystem.warningColor),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No hay docentes activos. Crea uno antes de registrar el aula.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Mapear uid → name para mostrar y guardar.
+        final byUid = <String, String>{};
+        for (final d in docs) {
+          final data = d.data() as Map<String, dynamic>;
+          final uid = (data['uid'] as String?) ?? d.id;
+          byUid[uid] = _displayName(data);
+        }
+        // Si el _teacherUid actual ya no está en la lista (docente desactivado),
+        // lo conservamos como entrada extra para no perder el dato en edición.
+        if (_teacherUid != null && !byUid.containsKey(_teacherUid)) {
+          byUid[_teacherUid!] = '${_teacherName ?? '(docente inactivo)'} · inactivo';
+        }
+
+        final entries = byUid.entries.toList()
+          ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
+
+        return DropdownButtonFormField<String>(
+          initialValue: _teacherUid,
+          isExpanded: true,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Selecciona un docente' : null,
+          decoration: AdminInputs.decoration(
+            label: 'Docente asignado *',
+            prefixIcon: Icons.person_outline_rounded,
+          ),
+          items: entries
+              .map((e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value, overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() {
+              _teacherUid = v;
+              _teacherName = byUid[v];
+            });
+          },
+        );
       },
     );
   }

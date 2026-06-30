@@ -23,7 +23,10 @@ service cloud.firestore {
       return isDocente() || isAdmin() || isAdminEmail();
     }
 
-    // Acceso a un salón para docentes: dueño del salón o asignado explícitamente
+    // Acceso a un salón para docentes: dueño del salón o asignado explícitamente.
+    // teacherUid sigue siendo el campo principal; teacherUids (lista) habilita
+    // polidocente sin reemplazar al principal. Se verifica con guard de
+    // existencia para no romper docs legacy que aún no tengan la lista.
     function hasClassroomAccess(classroomId) {
       return isAuthed() && (
         (
@@ -31,7 +34,11 @@ service cloud.firestore {
           (
             get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherUid == request.auth.uid ||
             get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherId == request.auth.uid ||
-            get(/databases/$(database)/documents/classrooms/$(classroomId)).data.ownerUid == request.auth.uid
+            get(/databases/$(database)/documents/classrooms/$(classroomId)).data.ownerUid == request.auth.uid ||
+            (
+              'teacherUids' in get(/databases/$(database)/documents/classrooms/$(classroomId)).data &&
+              request.auth.uid in get(/databases/$(database)/documents/classrooms/$(classroomId)).data.teacherUids
+            )
           )
         ) || (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -62,9 +69,17 @@ service cloud.firestore {
     }
 
     match /classrooms/{classroomId} {
-      // Permitir operaciones básicas a usuarios autenticados
-      allow create, read, update: if isAuthed();
-      
+      // Create/read: cualquier usuario autenticado.
+      allow create, read: if isAuthed();
+
+      // Update: cualquier autenticado, salvo cambios en `schedule`
+      // (horario), que quedan restringidos a admin. El QR y la asistencia
+      // no modifican `schedule`, así que esto no afecta su flujo.
+      allow update: if isAuthed() && (
+        (isAdmin() || isAdminEmail()) ||
+        !request.resource.data.diff(resource.data).changedKeys().hasAny(['schedule'])
+      );
+
       // Eliminar: Solo admin
       allow delete: if (isAdmin() || isAdminEmail());
     }

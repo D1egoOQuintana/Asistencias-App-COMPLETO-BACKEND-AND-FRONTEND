@@ -7,9 +7,9 @@
     "outDir": "./lib",
     "rootDir": "./src",
     "strict": true,
+    "ignoreDeprecations": "5.0",
     "moduleResolution": "node",
     "baseUrl": "./",
-    "ignoreDeprecations": "5.0",
     "paths": {
       "@/*": ["src/*"]
     },

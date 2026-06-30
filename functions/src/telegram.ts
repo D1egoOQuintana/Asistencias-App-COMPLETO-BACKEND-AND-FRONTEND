@@ -12,8 +12,31 @@ import axios from 'axios';
 // Usar la instancia de Firebase Admin ya inicializada
 const db = getFirestore();
 
-// TOKEN del bot de Telegram
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8305613209:AAFxld-nM5Qwe5Rs1TTDEbyXHOdu2Vg_NQw';
+// TOKEN del bot de Telegram. Se resuelve en runtime para no romper el discovery
+// de Firebase Functions durante deploy/predeploy.
+function getBotToken(): string {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    throw new Error(
+      'TELEGRAM_BOT_TOKEN no esta definido. Configuralo como variable de entorno/secreto antes de desplegar.'
+    );
+  }
+  return token;
+}
+
+function telegramApiUrl(method: string): string {
+  return `https://api.telegram.org/bot${getBotToken()}/${method}`;
+}
+
+function telegramErrorSummary(error: any): string {
+  const status = error?.response?.status;
+  const description = error?.response?.data?.description;
+  if (status || description) {
+    return 'Telegram API error' + (status ? ' ' + status : '') + (description ? ': ' + description : '');
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 const BOT_USERNAME_FALLBACK = process.env.TELEGRAM_BOT_USERNAME || 'mi_bot_asistencia';
 let cachedBotUsername: string | null = null;
 
@@ -26,14 +49,14 @@ async function getBotUsername(): Promise<string> {
   if (cachedBotUsername) return cachedBotUsername;
 
   try {
-    const resp = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`);
+    const resp = await axios.get(telegramApiUrl('getMe'));
     const username = resp?.data?.result?.username;
     if (typeof username === 'string' && username.trim().length > 0) {
       cachedBotUsername = username.trim();
       return cachedBotUsername;
     }
   } catch (e) {
-    console.warn('No se pudo obtener username del bot por getMe, usando fallback:', e);
+    console.warn('No se pudo obtener username del bot por getMe, usando fallback:', telegramErrorSummary(e));
   }
 
   cachedBotUsername = BOT_USERNAME_FALLBACK;
@@ -425,8 +448,8 @@ async function processAttendanceEvent(event: any) {
       }, { merge: true });
     }
   } catch (error) {
-    console.error('Error enviando notificación de Telegram:', error);
-    await logTelegramEvent({ type: 'trigger.error', docId: event.params?.docId, error: String(error) });
+    console.error('Error enviando notificación de Telegram:', telegramErrorSummary(error));
+    await logTelegramEvent({ type: 'trigger.error', docId: event.params?.docId, error: telegramErrorSummary(error) });
   }
 }
 
@@ -544,12 +567,12 @@ async function processAttendanceEventNotification(event: any) {
       notificationEventKey,
     });
   } catch (error) {
-    console.error('Error enviando notificación por attendance_events:', error);
+    console.error('Error enviando notificación por attendance_events:', telegramErrorSummary(error));
     await logTelegramEvent({
       type: 'events.error',
       eventId: event.params?.eventId,
       classroomId: event.params?.classroomId,
-      error: String(error),
+      error: telegramErrorSummary(error),
     });
   }
 }
@@ -696,7 +719,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
       
       console.log('📨 Enviando código directamente al chat:', chatData.chatId);
       
-      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      await axios.post(telegramApiUrl('sendMessage'), {
         chat_id: chatData.chatId,
         text: activationMessage,
         parse_mode: 'Markdown'
@@ -723,7 +746,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
     console.log(`✅ Código de activación enviado para ${studentName}: ${activationCode}`);
     
   } catch (error) {
-    console.error('Error enviando código de activación:', error);
+    console.error('Error enviando código de activación:', telegramErrorSummary(error));
   }
 }
 
@@ -759,7 +782,7 @@ async function sendRegularNotification(
 
 ${isExit ? '✅ Su hijo(a) ha registrado salida exitosamente.' : '✅ Su hijo(a) ha registrado asistencia exitosamente.'}`;
     
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    await axios.post(telegramApiUrl('sendMessage'), {
       chat_id: student.parentTelegramChatId,
       text: message,
       parse_mode: 'Markdown'
@@ -769,8 +792,8 @@ ${isExit ? '✅ Su hijo(a) ha registrado salida exitosamente.' : '✅ Su hijo(a)
     await logTelegramEvent({ type: 'regular.sent', studentId: attendanceData.studentId, chatId: student.parentTelegramChatId });
     
   } catch (error) {
-    console.error('Error enviando notificación regular:', error);
-    await logTelegramEvent({ type: 'regular.error', studentId: attendanceData.studentId, error: String(error) });
+    console.error('Error enviando notificación regular:', telegramErrorSummary(error));
+    await logTelegramEvent({ type: 'regular.error', studentId: attendanceData.studentId, error: telegramErrorSummary(error) });
   }
 }
 
@@ -829,7 +852,7 @@ export const handleTelegramWebhook = onRequest(async (request, response) => {
           one_time_keyboard: true
         };
 
-        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        await axios.post(telegramApiUrl('sendMessage'), {
           chat_id: chatId,
           text: welcomeMessage,
           parse_mode: 'Markdown',
@@ -915,7 +938,7 @@ export const handleTelegramWebhook = onRequest(async (request, response) => {
 👨‍🎓 Alumno(s):\n- ${linked.join('\n- ')}
 
 🔔 A partir de ahora recibirá notificaciones automáticas de asistencia.`;
-          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          await axios.post(telegramApiUrl('sendMessage'), {
             chat_id: chatId,
             text: success,
             parse_mode: 'Markdown'
@@ -925,7 +948,7 @@ export const handleTelegramWebhook = onRequest(async (request, response) => {
           const info = `ℹ️ Número recibido: ${normalizedE164}
 
 No encontré alumnos con este teléfono de apoderado en el sistema. Si cree que es un error, confirme con el colegio que el número esté registrado correctamente.`;
-          await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          await axios.post(telegramApiUrl('sendMessage'), {
             chat_id: chatId,
             text: info,
             parse_mode: 'Markdown'
@@ -947,7 +970,7 @@ También puede escribir el **código de 6 dígitos** que se generó al registrar
 
 💡 **Ejemplo:** \`842913\``;
 
-        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        await axios.post(telegramApiUrl('sendMessage'), {
           chat_id: chatId,
           text: helpMessage,
           parse_mode: 'Markdown'
@@ -957,7 +980,7 @@ También puede escribir el **código de 6 dígitos** que se generó al registrar
     
     response.status(200).send('OK');
   } catch (error) {
-    console.error('Error en webhook:', error);
+    console.error('Error en webhook:', telegramErrorSummary(error));
     response.status(500).send('Error');
   }
 });
@@ -996,7 +1019,7 @@ El código \`${code}\` no es válido, ya ha sido usado, o ha expirado.
 
 💡 Si necesita un nuevo código, pida al profesor que registre otra asistencia.`;
 
-      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      await axios.post(telegramApiUrl('sendMessage'), {
         chat_id: chatId,
         text: errorMessage,
         parse_mode: 'Markdown'
@@ -1066,7 +1089,7 @@ El código \`${code}\` no es válido, ya ha sido usado, o ha expirado.
 
 ¡Sistema activado correctamente! 📚✨`;
 
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    await axios.post(telegramApiUrl('sendMessage'), {
       chat_id: chatId,
       text: successMessage,
       parse_mode: 'Markdown'
@@ -1075,13 +1098,13 @@ El código \`${code}\` no es válido, ya ha sido usado, o ha expirado.
     console.log(`✅ Activación exitosa: ${parentName} (${chatId}) -> ${codeData.studentName}`);
     
   } catch (error) {
-    console.error('Error procesando código de activación:', error);
+    console.error('Error procesando código de activación:', telegramErrorSummary(error));
     
     const errorMessage = `⚠️ **Error temporal**
 
 Hubo un problema procesando su código. Por favor, inténtelo nuevamente en unos momentos.`;
 
-    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    await axios.post(telegramApiUrl('sendMessage'), {
       chat_id: chatId,
       text: errorMessage,
       parse_mode: 'Markdown'
@@ -1164,6 +1187,15 @@ function classroomDisplayName(data: any): string {
   return name || 'Aula';
 }
 
+function isPresenceAttendance(data: any): boolean {
+  const status = (data?.status ?? '').toString().trim().toLowerCase();
+  const source = (data?.source ?? '').toString().trim().toLowerCase();
+  if (status === 'absent' || status === 'ausente' || source === 'auto_absent') {
+    return false;
+  }
+  return true;
+}
+
 // Envía a un apoderado (ya vinculado) el aviso de inasistencia.
 async function sendAbsenceNotification(
   student: any,
@@ -1183,7 +1215,7 @@ async function sendAbsenceNotification(
 
 ❌ ${firstName} no registró asistencia hoy. Si cree que es un error, comuníquese con la institución educativa.`;
 
-  await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+  await axios.post(telegramApiUrl('sendMessage'), {
     chat_id: chatId,
     text: message,
     parse_mode: 'Markdown',
@@ -1224,7 +1256,9 @@ async function computeAndNotifyAbsences(
     .where('date', '==', dayKey)
     .get();
   for (const doc of attendanceSnap.docs) {
-    const sid = (doc.data()?.studentId ?? '').toString().trim();
+    const data = doc.data();
+    if (!isPresenceAttendance(data)) continue;
+    const sid = (data?.studentId ?? '').toString().trim();
     if (sid) presentIds.add(sid);
   }
 
@@ -1264,7 +1298,7 @@ async function computeAndNotifyAbsences(
         await logTelegramEvent({ type: 'absence.sent', studentId: stuDoc.id, classroomId, dayKey });
       }
     } catch (e) {
-      await logTelegramEvent({ type: 'absence.error', studentId: stuDoc.id, classroomId, dayKey, error: String(e) });
+      await logTelegramEvent({ type: 'absence.error', studentId: stuDoc.id, classroomId, dayKey, error: telegramErrorSummary(e) });
     }
   }
 
@@ -1386,7 +1420,7 @@ export const notifyAbsencesScheduled = onSchedule({
         type: 'absence.scheduled.error',
         classroomId: classDoc.id,
         dayKey,
-        error: String(e),
+        error: telegramErrorSummary(e),
       });
     }
   }

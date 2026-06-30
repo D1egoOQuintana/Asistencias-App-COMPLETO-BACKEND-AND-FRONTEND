@@ -32,11 +32,14 @@ skills-lock.json
 
 # Environment variables
 .env
+.env.*
 .env.local
 .env.production
 functions/.env
+functions/.env.*
 functions/.env.local
 functions/.env.production
+!functions/.env.example
 
 # ===== FLUTTER APP =====
 # Dart/Flutter cache
@@ -47,6 +50,7 @@ asistencias_app/.packages
 asistencias_app/.pub-cache/
 asistencias_app/.pub/
 asistencias_app/build/
+asistencias_app/android/build/
 asistencias_app/.metadata
 
 # Android
@@ -61,6 +65,9 @@ asistencias_app/android/key.properties
 asistencias_app/android/*.jks
 asistencias_app/android/*.keystore
 asistencias_app/android/app/google-services.json
+
+# CodeGraph (índice/caché local, no versionar)
+.codegraph/
 
 # iOS
 asistencias_app/ios/**/*.mode1v3
@@ -98,6 +105,12 @@ asistencias_app/.idea/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ===== CREDENCIALES / SERVICE ACCOUNTS =====
+serviceAccount*.json
+*-service-account.json
+*.service-account.json
+*-adminsdk-*.json
 
 # ===== TEMPORALES =====
 backup-*/
