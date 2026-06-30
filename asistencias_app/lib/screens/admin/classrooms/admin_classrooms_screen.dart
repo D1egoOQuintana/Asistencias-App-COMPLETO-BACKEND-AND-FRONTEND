@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../models/classroom_model.dart';
 import '../../../services/classroom_service.dart';
+import '../../../services/teacher_service.dart';
 import '../../../theme/app_design_system.dart';
 import 'widgets/classroom_form_dialog.dart';
 import 'widgets/assign_teacher_dialog.dart';
@@ -19,8 +20,10 @@ const List<AdminColumn> _classroomColumns = [
   AdminColumn.flex(4, header: 'DOCENTE'), // ícono + nombre
   AdminColumn.flex(3, header: 'HORARIO'), // texto
   AdminColumn.fixed(124, header: 'ESTADO'), // chip centrado
-  AdminColumn.fixed(AdminTable.actionColWidth,
-      align: Alignment.centerRight), // acciones
+  AdminColumn.fixed(
+    AdminTable.actionColWidth,
+    align: Alignment.centerRight,
+  ), // acciones
 ];
 
 // Padding horizontal de la tabla de Aulas (header y filas deben coincidir).
@@ -50,14 +53,18 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
   // Fetch active classrooms (getAllClassrooms filters isActive==true).
   // Inactive classrooms view → TODO Fase 5: add isActive filter toggle.
   final Stream<QuerySnapshot> _stream = ClassroomService.getAllClassrooms();
+  late final Stream<QuerySnapshot> _teachersStream =
+      TeacherService.getTeachersStream();
 
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {
-          _query = _search.text;
-          _page = 0; // reiniciar paginación al buscar
-        }));
+    _search.addListener(
+      () => setState(() {
+        _query = _search.text;
+        _page = 0; // reiniciar paginación al buscar
+      }),
+    );
   }
 
   @override
@@ -103,6 +110,26 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
     return list;
   }
 
+  Map<String, String> _teacherNamesByUid(QuerySnapshot? snap) {
+    final result = <String, String>{};
+    for (final doc in snap?.docs ?? const <QueryDocumentSnapshot>[]) {
+      final data = (doc.data() as Map<String, dynamic>?) ?? {};
+      final uid = ((data['uid'] as String?) ?? doc.id).trim();
+      if (uid.isEmpty) continue;
+      final fullName = (data['fullName'] ?? '').toString().trim();
+      final firstName = (data['firstName'] ?? '').toString().trim();
+      final lastName = (data['lastName'] ?? '').toString().trim();
+      final email = (data['email'] ?? '').toString().trim();
+      final name = fullName.isNotEmpty
+          ? fullName
+          : '$firstName $lastName'.trim().isNotEmpty
+          ? '$firstName $lastName'.trim()
+          : email;
+      if (name.isNotEmpty) result[uid] = name;
+    }
+    return result;
+  }
+
   // ── Dialogs / actions ──────────────────────────────────────────────────────
 
   void _showCreateDialog() {
@@ -139,7 +166,8 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
-            borderRadius: AppDesignSystem.borderRadiusLG),
+          borderRadius: AppDesignSystem.borderRadiusLG,
+        ),
         title: Text(
           '¿${c.isActive ? 'Desactivar' : 'Activar'} aula?',
           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -170,12 +198,14 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
         ? await ClassroomService.deactivateClassroom(c.id!)
         : await ClassroomService.reactivateClassroom(c.id!);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(AdminFeedback.snack(
-      ok ? AdminFeedbackType.success : AdminFeedbackType.error,
-      ok
-          ? 'Aula ${c.isActive ? 'desactivada' : 'activada'} correctamente'
-          : 'No se pudo cambiar el estado',
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      AdminFeedback.snack(
+        ok ? AdminFeedbackType.success : AdminFeedbackType.error,
+        ok
+            ? 'Aula ${c.isActive ? 'desactivada' : 'activada'} correctamente'
+            : 'No se pudo cambiar el estado',
+      ),
+    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -285,9 +315,10 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
                 const Text(
                   'Estado operativo:',
                   style: TextStyle(
-                      fontSize: 12,
-                      color: AppDesignSystem.textSecondary,
-                      fontWeight: FontWeight.w600),
+                    fontSize: 12,
+                    color: AppDesignSystem.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 ..._buildFilterChips(),
@@ -348,94 +379,114 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
         final pageModels = total == 0
             ? const <ClassroomModel>[]
             : models.sublist(
-                page * perPage, (page * perPage + perPage).clamp(0, total));
+                page * perPage,
+                (page * perPage + perPage).clamp(0, total),
+              );
 
-        return Container(
-          decoration: AdminUi.cardDecoration(elevated: false),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Table header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: AppDesignSystem.primaryColor.withValues(alpha: 0.08),
-                        borderRadius: AppDesignSystem.borderRadiusSM,
-                      ),
-                      child: const Icon(Icons.class_rounded,
-                          size: 17, color: AppDesignSystem.primaryColor),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Aulas (${models.length})',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppDesignSystem.textPrimary,
-                      ),
-                    ),
-                    if (allModels.length != models.length) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppDesignSystem.warningColor.withValues(alpha: 0.1),
-                          borderRadius: AppDesignSystem.borderRadiusFull,
-                        ),
-                        child: Text(
-                          '${allModels.length} total',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppDesignSystem.warningColor,
+        return StreamBuilder<QuerySnapshot>(
+          stream: _teachersStream,
+          builder: (context, teachersSnap) {
+            final teacherNamesByUid = _teacherNamesByUid(teachersSnap.data);
+            return Container(
+              decoration: AdminUi.cardDecoration(elevated: false),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Table header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: AppDesignSystem.primaryColor.withValues(
+                              alpha: 0.08,
+                            ),
+                            borderRadius: AppDesignSystem.borderRadiusSM,
+                          ),
+                          child: const Icon(
+                            Icons.class_rounded,
+                            size: 17,
+                            color: AppDesignSystem.primaryColor,
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Divider(height: 1, color: _kBorder),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Aulas (${models.length})',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppDesignSystem.textPrimary,
+                          ),
+                        ),
+                        if (allModels.length != models.length) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppDesignSystem.warningColor.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: AppDesignSystem.borderRadiusFull,
+                            ),
+                            child: Text(
+                              '${allModels.length} total',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppDesignSystem.warningColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: _kBorder),
 
-              if (models.isEmpty)
-                _emptyState()
-              else if (showTable)
-                _ClassroomsWebTable(
-                  classrooms: pageModels,
-                  opStatus: _opStatus,
-                  onEdit: _showEditDialog,
-                  onAssignTeacher: _showAssignTeacher,
-                  onSchedule: _showSchedule,
-                  onToggle: _confirmToggle,
-                )
-              else
-                _ClassroomsMobileList(
-                  classrooms: pageModels,
-                  opStatus: _opStatus,
-                  onEdit: _showEditDialog,
-                  onAssignTeacher: _showAssignTeacher,
-                  onSchedule: _showSchedule,
-                  onToggle: _confirmToggle,
-                ),
-              if (models.isNotEmpty && total > perPage)
-                AdminPaginationBar(
-                  page: page,
-                  pageCount: pageCount,
-                  totalItems: total,
-                  onPrev:
-                      page > 0 ? () => setState(() => _page = page - 1) : null,
-                  onNext: page < pageCount - 1
-                      ? () => setState(() => _page = page + 1)
-                      : null,
-                ),
-            ],
-          ),
+                  if (models.isEmpty)
+                    _emptyState()
+                  else if (showTable)
+                    _ClassroomsWebTable(
+                      classrooms: pageModels,
+                      teacherNamesByUid: teacherNamesByUid,
+                      opStatus: _opStatus,
+                      onEdit: _showEditDialog,
+                      onAssignTeacher: _showAssignTeacher,
+                      onSchedule: _showSchedule,
+                      onToggle: _confirmToggle,
+                    )
+                  else
+                    _ClassroomsMobileList(
+                      classrooms: pageModels,
+                      teacherNamesByUid: teacherNamesByUid,
+                      opStatus: _opStatus,
+                      onEdit: _showEditDialog,
+                      onAssignTeacher: _showAssignTeacher,
+                      onSchedule: _showSchedule,
+                      onToggle: _confirmToggle,
+                    ),
+                  if (models.isNotEmpty && total > perPage)
+                    AdminPaginationBar(
+                      page: page,
+                      pageCount: pageCount,
+                      totalItems: total,
+                      onPrev: page > 0
+                          ? () => setState(() => _page = page - 1)
+                          : null,
+                      onNext: page < pageCount - 1
+                          ? () => setState(() => _page = page + 1)
+                          : null,
+                    ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -457,31 +508,35 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
             child: Row(
               children: [
                 _SkeletonBox(
-                    width: 36,
-                    height: 36,
-                    radius: AppDesignSystem.borderRadiusSM),
+                  width: 36,
+                  height: 36,
+                  radius: AppDesignSystem.borderRadiusSM,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _SkeletonBox(
-                          width: double.infinity,
-                          height: 12,
-                          radius: AppDesignSystem.borderRadiusFull),
+                        width: double.infinity,
+                        height: 12,
+                        radius: AppDesignSystem.borderRadiusFull,
+                      ),
                       const SizedBox(height: 6),
                       _SkeletonBox(
-                          width: 120,
-                          height: 10,
-                          radius: AppDesignSystem.borderRadiusFull),
+                        width: 120,
+                        height: 10,
+                        radius: AppDesignSystem.borderRadiusFull,
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 12),
                 _SkeletonBox(
-                    width: 70,
-                    height: 24,
-                    radius: AppDesignSystem.borderRadiusFull),
+                  width: 70,
+                  height: 24,
+                  radius: AppDesignSystem.borderRadiusFull,
+                ),
               ],
             ),
           ),
@@ -501,13 +556,18 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
       child: Center(
         child: Column(
           children: [
-            const Icon(Icons.error_outline_rounded,
-                size: 36, color: AppDesignSystem.errorColor),
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 36,
+              color: AppDesignSystem.errorColor,
+            ),
             const SizedBox(height: 8),
             const Text(
               'Error al cargar aulas',
               style: TextStyle(
-                  color: AppDesignSystem.errorColor, fontWeight: FontWeight.w600),
+                color: AppDesignSystem.errorColor,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -521,17 +581,21 @@ class _AdminClassroomsScreenState extends State<AdminClassroomsScreen>
       child: Center(
         child: Column(
           children: [
-            const Icon(Icons.class_outlined,
-                size: 48, color: AppDesignSystem.textDisabled),
+            const Icon(
+              Icons.class_outlined,
+              size: 48,
+              color: AppDesignSystem.textDisabled,
+            ),
             const SizedBox(height: 12),
             Text(
               _query.isNotEmpty || _filterOp != 'all'
                   ? 'Sin resultados para el filtro aplicado'
                   : 'No hay aulas registradas',
               style: const TextStyle(
-                  fontSize: 14,
-                  color: AppDesignSystem.textSecondary,
-                  fontWeight: FontWeight.w500),
+                fontSize: 14,
+                color: AppDesignSystem.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             if (_query.isEmpty && _filterOp == 'all') ...[
               const SizedBox(height: 8),
@@ -560,6 +624,7 @@ enum _OpStatus { ready, noTeacher, noSchedule }
 
 class _ClassroomsWebTable extends StatelessWidget {
   final List<ClassroomModel> classrooms;
+  final Map<String, String> teacherNamesByUid;
   final _OpStatus Function(ClassroomModel) opStatus;
   final void Function(ClassroomModel) onEdit;
   final void Function(ClassroomModel) onAssignTeacher;
@@ -568,6 +633,7 @@ class _ClassroomsWebTable extends StatelessWidget {
 
   const _ClassroomsWebTable({
     required this.classrooms,
+    required this.teacherNamesByUid,
     required this.opStatus,
     required this.onEdit,
     required this.onAssignTeacher,
@@ -589,6 +655,7 @@ class _ClassroomsWebTable extends StatelessWidget {
         ...classrooms.asMap().entries.map((e) {
           return _ClassroomTableRow(
             classroom: e.value,
+            teacherNamesByUid: teacherNamesByUid,
             status: opStatus(e.value),
             isLast: e.key == classrooms.length - 1,
             onEdit: onEdit,
@@ -604,6 +671,7 @@ class _ClassroomsWebTable extends StatelessWidget {
 
 class _ClassroomTableRow extends StatefulWidget {
   final ClassroomModel classroom;
+  final Map<String, String> teacherNamesByUid;
   final _OpStatus status;
   final bool isLast;
   final void Function(ClassroomModel) onEdit;
@@ -613,6 +681,7 @@ class _ClassroomTableRow extends StatefulWidget {
 
   const _ClassroomTableRow({
     required this.classroom,
+    required this.teacherNamesByUid,
     required this.status,
     required this.isLast,
     required this.onEdit,
@@ -632,8 +701,11 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
     final s = widget.classroom.schedule;
     if (s == null || s.isEmpty) return '—';
     const abbrev = {
-      'monday': 'Lun', 'tuesday': 'Mar', 'wednesday': 'Mié',
-      'thursday': 'Jue', 'friday': 'Vie',
+      'monday': 'Lun',
+      'tuesday': 'Mar',
+      'wednesday': 'Mié',
+      'thursday': 'Jue',
+      'friday': 'Vie',
     };
     final keys = s.keys.toList()..sort();
     return keys.map((k) => abbrev[k] ?? k.substring(0, 3)).join(', ');
@@ -642,6 +714,7 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
   @override
   Widget build(BuildContext context) {
     final c = widget.classroom;
+    final teacherInfo = _ClassroomTeacherInfo.from(c, widget.teacherNamesByUid);
     final initial = c.grade.isNotEmpty
         ? c.grade
         : c.name.substring(0, 1).toUpperCase();
@@ -669,8 +742,9 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color:
-                            AppDesignSystem.primaryColor.withValues(alpha: 0.08),
+                        color: AppDesignSystem.primaryColor.withValues(
+                          alpha: 0.08,
+                        ),
                         borderRadius: AppDesignSystem.borderRadiusSM,
                       ),
                       alignment: Alignment.center,
@@ -697,40 +771,12 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
                 // GRADO / SEC (texto)
                 Text(
                   c.grade.isNotEmpty ? '${c.grade}° ${c.section}' : '—',
-                  style: AdminType.bodySm
-                      .copyWith(color: AppDesignSystem.textSecondary),
+                  style: AdminType.bodySm.copyWith(
+                    color: AppDesignSystem.textSecondary,
+                  ),
                 ),
                 // DOCENTE (ícono + nombre)
-                Row(
-                  children: [
-                    Icon(
-                      c.hasTeacher
-                          ? Icons.person_rounded
-                          : Icons.person_off_outlined,
-                      size: 14,
-                      color: c.hasTeacher
-                          ? AppDesignSystem.textSecondary
-                          : AppDesignSystem.warningColor,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        c.teacherName?.isNotEmpty == true
-                            ? c.teacherName!
-                            : 'Sin asignar',
-                        style: AdminType.bodySm.copyWith(
-                          color: c.hasTeacher
-                              ? AppDesignSystem.textPrimary
-                              : AppDesignSystem.warningColor,
-                          fontWeight:
-                              c.hasTeacher ? FontWeight.w500 : FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
+                _ClassroomTeacherCell(info: teacherInfo),
                 // HORARIO (texto)
                 Text(
                   _scheduleLabel(),
@@ -738,8 +784,9 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
                     color: c.hasSchedule
                         ? AppDesignSystem.textSecondary
                         : AppDesignSystem.infoColor,
-                    fontWeight:
-                        c.hasSchedule ? FontWeight.w500 : FontWeight.w600,
+                    fontWeight: c.hasSchedule
+                        ? FontWeight.w500
+                        : FontWeight.w600,
                   ),
                 ),
                 // ESTADO (chip centrado por la spec)
@@ -776,6 +823,7 @@ class _ClassroomTableRowState extends State<_ClassroomTableRow> {
 
 class _ClassroomsMobileList extends StatelessWidget {
   final List<ClassroomModel> classrooms;
+  final Map<String, String> teacherNamesByUid;
   final _OpStatus Function(ClassroomModel) opStatus;
   final void Function(ClassroomModel) onEdit;
   final void Function(ClassroomModel) onAssignTeacher;
@@ -784,6 +832,7 @@ class _ClassroomsMobileList extends StatelessWidget {
 
   const _ClassroomsMobileList({
     required this.classrooms,
+    required this.teacherNamesByUid,
     required this.opStatus,
     required this.onEdit,
     required this.onAssignTeacher,
@@ -800,6 +849,7 @@ class _ClassroomsMobileList extends StatelessWidget {
       separatorBuilder: (_, __) => Divider(height: 1, color: _kBorder),
       itemBuilder: (ctx, i) {
         final c = classrooms[i];
+        final teacherInfo = _ClassroomTeacherInfo.from(c, teacherNamesByUid);
         final initial = c.grade.isNotEmpty
             ? c.grade
             : c.name.substring(0, 1).toUpperCase();
@@ -849,19 +899,11 @@ class _ClassroomsMobileList extends StatelessWidget {
                       Text(
                         '${c.grade}° ${c.section} · Cap. ${c.capacity}',
                         style: const TextStyle(
-                            fontSize: 12,
-                            color: AppDesignSystem.textSecondary),
+                          fontSize: 12,
+                          color: AppDesignSystem.textSecondary,
+                        ),
                       ),
-                    Text(
-                      c.hasTeacher ? (c.teacherName ?? '') : 'Sin docente',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: c.hasTeacher
-                            ? AppDesignSystem.textSecondary
-                            : AppDesignSystem.warningColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    _MobileTeacherSummary(info: teacherInfo),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -899,6 +941,229 @@ class _ClassroomsMobileList extends StatelessWidget {
 // SHARED WIDGETS
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _ClassroomTeacherInfo {
+  final bool hasTeacher;
+  final bool isPolidocente;
+  final int count;
+  final String primaryName;
+  final List<String> assignedNames;
+  final List<String> additionalNames;
+
+  const _ClassroomTeacherInfo({
+    required this.hasTeacher,
+    required this.isPolidocente,
+    required this.count,
+    required this.primaryName,
+    required this.assignedNames,
+    required this.additionalNames,
+  });
+
+  factory _ClassroomTeacherInfo.from(
+    ClassroomModel classroom,
+    Map<String, String> teacherNamesByUid,
+  ) {
+    final orderedUids = <String>[];
+    void addUid(String? uid) {
+      final value = (uid ?? '').trim();
+      if (value.isEmpty || orderedUids.contains(value)) return;
+      orderedUids.add(value);
+    }
+
+    addUid(classroom.teacherUid);
+    for (final uid in classroom.effectiveTeacherUids) {
+      addUid(uid);
+    }
+
+    final primaryUid = orderedUids.isNotEmpty ? orderedUids.first : null;
+    final storedPrimaryName = (classroom.teacherName ?? '').trim();
+
+    String labelFor(String uid) {
+      if (uid == primaryUid && storedPrimaryName.isNotEmpty) {
+        return storedPrimaryName;
+      }
+      return teacherNamesByUid[uid] ?? _shortUid(uid);
+    }
+
+    final assignedNames = orderedUids.map(labelFor).toList();
+    final primaryName = assignedNames.isNotEmpty
+        ? assignedNames.first
+        : storedPrimaryName.isNotEmpty
+        ? storedPrimaryName
+        : 'Sin asignar';
+
+    return _ClassroomTeacherInfo(
+      hasTeacher: orderedUids.isNotEmpty || storedPrimaryName.isNotEmpty,
+      isPolidocente: classroom.isPolidocente || orderedUids.length > 1,
+      count: orderedUids.length,
+      primaryName: primaryName,
+      assignedNames: assignedNames,
+      additionalNames: assignedNames.length > 1
+          ? assignedNames.skip(1).toList()
+          : const [],
+    );
+  }
+
+  String get countLabel => count == 1 ? '1 docente' : '$count docentes';
+  String get tooltip => assignedNames.isEmpty
+      ? primaryName
+      : 'Docentes asignados: ${assignedNames.join(', ')}';
+}
+
+String _shortUid(String uid) {
+  if (uid.length <= 8) return uid;
+  return '${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}';
+}
+
+class _ClassroomTeacherCell extends StatelessWidget {
+  final _ClassroomTeacherInfo info;
+
+  const _ClassroomTeacherCell({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = info.hasTeacher
+        ? AppDesignSystem.textPrimary
+        : AppDesignSystem.warningColor;
+    final chips = <Widget>[
+      if (info.isPolidocente)
+        const _TeacherMetaChip(label: 'Polidocente', emphasized: true),
+      if (info.count > 0) _TeacherMetaChip(label: info.countLabel),
+      if (info.additionalNames.isNotEmpty)
+        _TeacherMetaChip(label: info.additionalNames.first),
+      if (info.additionalNames.length > 1)
+        _TeacherMetaChip(label: '+${info.additionalNames.length - 1}'),
+    ];
+
+    return Tooltip(
+      message: info.tooltip,
+      waitDuration: const Duration(milliseconds: 350),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                info.hasTeacher
+                    ? Icons.person_rounded
+                    : Icons.person_off_outlined,
+                size: 14,
+                color: info.hasTeacher
+                    ? AppDesignSystem.textSecondary
+                    : AppDesignSystem.warningColor,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  info.primaryName,
+                  style: AdminType.bodySm.copyWith(
+                    color: color,
+                    fontWeight: info.hasTeacher
+                        ? FontWeight.w600
+                        : FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Wrap(spacing: 4, runSpacing: 2, children: chips),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileTeacherSummary extends StatelessWidget {
+  final _ClassroomTeacherInfo info;
+
+  const _MobileTeacherSummary({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <Widget>[
+      if (info.isPolidocente)
+        const _TeacherMetaChip(label: 'Polidocente', emphasized: true),
+      if (info.count > 0) _TeacherMetaChip(label: info.countLabel),
+      ...info.additionalNames
+          .take(2)
+          .map((name) => _TeacherMetaChip(label: name)),
+      if (info.additionalNames.length > 2)
+        _TeacherMetaChip(label: '+${info.additionalNames.length - 2}'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            info.hasTeacher ? info.primaryName : 'Sin docente',
+            style: TextStyle(
+              fontSize: 12,
+              color: info.hasTeacher
+                  ? AppDesignSystem.textSecondary
+                  : AppDesignSystem.warningColor,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(spacing: 5, runSpacing: 5, children: chips),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TeacherMetaChip extends StatelessWidget {
+  final String label;
+  final bool emphasized;
+
+  const _TeacherMetaChip({required this.label, this.emphasized = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = emphasized
+        ? AppDesignSystem.primaryColor
+        : AppDesignSystem.textSecondary;
+    final bg = emphasized
+        ? AppDesignSystem.primaryColor.withValues(alpha: 0.08)
+        : AdminUi.canvas;
+    final border = emphasized
+        ? AppDesignSystem.primaryColor.withValues(alpha: 0.18)
+        : AdminUi.border;
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 132),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: AppDesignSystem.borderRadiusFull,
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10.5,
+          height: 1.15,
+          fontWeight: FontWeight.w700,
+          color: fg,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
 class _OpStatusChip extends StatelessWidget {
   final _OpStatus status;
   const _OpStatusChip({required this.status});
@@ -907,20 +1172,20 @@ class _OpStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color, bg) = switch (status) {
       _OpStatus.ready => (
-          'Lista',
-          AppDesignSystem.successColor,
-          const Color(0xFFE6F4EA),
-        ),
+        'Lista',
+        AppDesignSystem.successColor,
+        const Color(0xFFE6F4EA),
+      ),
       _OpStatus.noTeacher => (
-          'Sin docente',
-          AppDesignSystem.warningColor,
-          const Color(0xFFFFF3E0),
-        ),
+        'Sin docente',
+        AppDesignSystem.warningColor,
+        const Color(0xFFFFF3E0),
+      ),
       _OpStatus.noSchedule => (
-          'Sin horario',
-          AppDesignSystem.infoColor,
-          const Color(0xFFE3F0FC),
-        ),
+        'Sin horario',
+        AppDesignSystem.infoColor,
+        const Color(0xFFE3F0FC),
+      ),
     };
 
     return Container(
@@ -972,8 +1237,11 @@ class _RowMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
       tooltip: 'Más acciones',
-      icon: const Icon(Icons.more_horiz_rounded,
-          size: 18, color: AdminUi.neutralAction),
+      icon: const Icon(
+        Icons.more_horiz_rounded,
+        size: 18,
+        color: AdminUi.neutralAction,
+      ),
       padding: EdgeInsets.zero,
       splashRadius: 18,
       position: PopupMenuPosition.under,
@@ -997,8 +1265,11 @@ class _RowMenu extends StatelessWidget {
           value: 'assign',
           child: Row(
             children: [
-              const Icon(Icons.person_add_alt_1_rounded,
-                  size: 18, color: AdminUi.neutralAction),
+              const Icon(
+                Icons.person_add_alt_1_rounded,
+                size: 18,
+                color: AdminUi.neutralAction,
+              ),
               const SizedBox(width: 10),
               Text('Asignar docente', style: AdminType.bodySm),
             ],
@@ -1008,8 +1279,11 @@ class _RowMenu extends StatelessWidget {
           value: 'schedule',
           child: Row(
             children: [
-              const Icon(Icons.schedule_rounded,
-                  size: 18, color: AdminUi.neutralAction),
+              const Icon(
+                Icons.schedule_rounded,
+                size: 18,
+                color: AdminUi.neutralAction,
+              ),
               const SizedBox(width: 10),
               Text('Configurar horario', style: AdminType.bodySm),
             ],
