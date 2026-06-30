@@ -62,9 +62,17 @@ service cloud.firestore {
     }
 
     match /classrooms/{classroomId} {
-      // Permitir operaciones básicas a usuarios autenticados
-      allow create, read, update: if isAuthed();
-      
+      // Create/read: cualquier usuario autenticado.
+      allow create, read: if isAuthed();
+
+      // Update: cualquier autenticado, salvo cambios en `schedule`
+      // (horario), que quedan restringidos a admin. El QR y la asistencia
+      // no modifican `schedule`, así que esto no afecta su flujo.
+      allow update: if isAuthed() && (
+        (isAdmin() || isAdminEmail()) ||
+        !request.resource.data.diff(resource.data).changedKeys().hasAny(['schedule'])
+      );
+
       // Eliminar: Solo admin
       allow delete: if (isAdmin() || isAdminEmail());
     }
