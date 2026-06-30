@@ -44,13 +44,16 @@ class ClassroomService {
       }
 
       // Crear el salón
+      final effectiveTeacherUid = teacherUid ?? currentUser.uid;
       final classroom = ClassroomModel(
         name: name,
         grade: grade,
         section: section,
         capacity: capacity,
         description: description,
-        teacherUid: teacherUid ?? currentUser.uid,
+        teacherUid: effectiveTeacherUid,
+        teacherUids: [effectiveTeacherUid],
+        isPolidocente: false,
         teacherName: teacherName,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),

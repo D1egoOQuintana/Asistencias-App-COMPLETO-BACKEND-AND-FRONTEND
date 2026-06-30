@@ -50,6 +50,8 @@ class ClassroomModel {
   final String? periodId;
   final String? periodName;
   final int? periodYear;
+  final List<String>? teacherUids;
+  final bool isPolidocente;
 
   ClassroomModel({
     this.id,
@@ -67,6 +69,8 @@ class ClassroomModel {
     this.periodId,
     this.periodName,
     this.periodYear,
+    this.teacherUids,
+    this.isPolidocente = false,
   });
 
   /// Crear desde Firebase Document
@@ -99,6 +103,8 @@ class ClassroomModel {
       periodId: data['periodId'],
       periodName: data['periodName'],
       periodYear: data['periodYear'],
+      teacherUids: (data['teacherUids'] as List<dynamic>?)?.cast<String>(),
+      isPolidocente: data['isPolidocente'] as bool? ?? false,
     );
   }
 
@@ -130,6 +136,8 @@ class ClassroomModel {
       periodId: data['periodId'],
       periodName: data['periodName'],
       periodYear: data['periodYear'],
+      teacherUids: (data['teacherUids'] as List<dynamic>?)?.cast<String>(),
+      isPolidocente: data['isPolidocente'] as bool? ?? false,
     );
   }
 
@@ -158,6 +166,9 @@ class ClassroomModel {
       );
     }
 
+    if (teacherUids != null) result['teacherUids'] = teacherUids;
+    result['isPolidocente'] = isPolidocente;
+
     return result;
   }
 
@@ -178,6 +189,8 @@ class ClassroomModel {
     String? periodId,
     String? periodName,
     int? periodYear,
+    List<String>? teacherUids,
+    bool? isPolidocente,
   }) {
     return ClassroomModel(
       id: id ?? this.id,
@@ -195,6 +208,8 @@ class ClassroomModel {
       periodId: periodId ?? this.periodId,
       periodName: periodName ?? this.periodName,
       periodYear: periodYear ?? this.periodYear,
+      teacherUids: teacherUids ?? this.teacherUids,
+      isPolidocente: isPolidocente ?? this.isPolidocente,
     );
   }
 
@@ -206,6 +221,11 @@ class ClassroomModel {
 
   /// Verificar si tiene horarios configurados
   bool get hasSchedule => schedule != null && schedule!.isNotEmpty;
+
+  /// Lista efectiva de docentes: teacherUids si existe, fallback a [teacherUid].
+  // ponytail: fallback centralizado; cuando existan queries por teacherUids, usar este getter.
+  List<String> get effectiveTeacherUids =>
+      teacherUids ?? (teacherUid != null ? [teacherUid!] : const []);
 
   @override
   String toString() {
