@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/admin_service.dart';
@@ -1031,7 +1032,9 @@ class _ClassroomTableRow extends StatelessWidget {
     return Column(
       children: [
         if (!isLast) Divider(height: 1, color: _kBorder),
-        Container(
+        InkWell(
+          onTap: () => Get.toNamed('/admin/aulas/${doc.id}'),
+          child: Container(
           height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
@@ -1171,12 +1174,13 @@ class _ClassroomTableRow extends StatelessWidget {
                   child: Icon(
                     Icons.chevron_right_rounded,
                     size: 18,
-                    color: AppDesignSystem.textDisabled,
+                    color: AppDesignSystem.primaryColor,
                   ),
                 ),
               ),
             ],
           ),
+        ),
         ),
       ],
     );

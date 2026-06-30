@@ -17,6 +17,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/web_role_blocked_screen.dart';
 import 'screens/auth/mobile_role_blocked_screen.dart';
 import 'screens/admin/admin_shell.dart';
+import 'screens/admin/classrooms/admin_classroom_detail_screen.dart';
 import 'screens/dashboard/modern_dashboard_screen.dart';
 
 void main() {
@@ -111,6 +112,13 @@ class MyApp extends StatelessWidget {
           GetPage(
               name: AdminRoutes.configuracion,
               page: () => const AdminRouteScreen(7)),
+          // Detalle de aula. Ej.: /admin/aulas/Q39spttI7nNWJQHcYFHJ
+          GetPage(
+            name: '/admin/aulas/:classroomId',
+            page: () => AdminClassroomDetailScreen(
+              classroomId: Get.parameters['classroomId'] ?? '',
+            ),
+          ),
         ],
         unknownRoute:
             GetPage(name: '/notfound', page: () => const _RouteNotFound()),
