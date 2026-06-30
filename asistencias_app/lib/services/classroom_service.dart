@@ -93,6 +93,32 @@ class ClassroomService {
     }
   }
 
+  /// Busca un aula ACTIVA donde el uid dado sea el tutor (teacherUid).
+  /// Devuelve `null` si no hay coincidencia.
+  ///
+  /// [excludeClassroomId] permite ignorar el aula actual cuando se está
+  /// editando, para no marcar conflicto contra sí misma.
+  ///
+  /// Esta validación aplica SOLO al tutor (teacherUid). El auxiliar
+  /// (segundo uid en teacherUids) puede repetirse en varias aulas.
+  static Future<ClassroomModel?> findActiveClassroomByTutor(
+    String tutorUid, {
+    String? excludeClassroomId,
+  }) async {
+    if (tutorUid.trim().isEmpty) return null;
+    final snap = await _firestore
+        .collection('classrooms')
+        .where('teacherUid', isEqualTo: tutorUid)
+        .where('isActive', isEqualTo: true)
+        .limit(2) // 2 para detectar conflicto incluso si excluimos uno
+        .get();
+    for (final doc in snap.docs) {
+      if (doc.id == excludeClassroomId) continue;
+      return ClassroomModel.fromFirestore(doc);
+    }
+    return null;
+  }
+
   /// Obtener salones por docente
   static Stream<QuerySnapshot> getClassroomsByTeacher(String teacherUid) {
     try {

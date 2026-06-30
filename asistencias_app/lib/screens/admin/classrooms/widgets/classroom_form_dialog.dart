@@ -158,6 +158,38 @@ class _ClassroomFormDialogState extends State<ClassroomFormDialog> {
     final section = _section.text.trim().toUpperCase();
     final capacity = int.parse(_capacity.text.trim());
 
+    // Validación 1 tutor = 1 aula activa.
+    // Solo se consulta cuando el tutor cambió (o al crear). Al editar
+    // un aula sin tocar el tutor se omite el round-trip y la validación.
+    final tutorChanged =
+        !_isEditing || widget.classroom!.teacherUid != _teacherUid;
+    if (tutorChanged) {
+      try {
+        final conflict = await ClassroomService.findActiveClassroomByTutor(
+          _teacherUid!,
+          excludeClassroomId: widget.classroom?.id,
+        );
+        if (conflict != null) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          final conflictLabel = conflict.grade.isNotEmpty
+              ? '${conflict.grade}° ${conflict.section} (${conflict.name})'
+              : conflict.name;
+          ScaffoldMessenger.of(context).showSnackBar(
+            AdminFeedback.snack(
+              AdminFeedbackType.error,
+              'Este tutor ya está asignado al aula $conflictLabel. Un tutor solo puede tener una aula activa.',
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        // Si la validación falla por red/reglas, no bloqueamos la operación:
+        // el guardado posterior reportará su propio error. Solo informamos.
+        debugPrint('findActiveClassroomByTutor falló: $e');
+      }
+    }
+
     try {
       bool ok;
       String message;
