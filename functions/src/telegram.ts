@@ -571,6 +571,30 @@ async function processAttendanceEventNotification(event: any) {
     const dayKey = getDayKeyLima(eventDate);
     const notificationEventKey = `${dayKey}_${eventType}`;
 
+    if (eventType === 'exit') {
+      const eventId = String(event.params?.eventId || '');
+      const entryEventId = eventId.endsWith('__exit')
+        ? eventId.replace(/__exit$/, '__entry')
+        : `${attendanceData.studentId || studentId}_${attendanceData.date || dayKey}__entry`;
+      const entryEventSnap = await snap.ref.parent.doc(entryEventId).get();
+      const entryEventAt = timestampToDate(entryEventSnap.data()?.eventAt);
+      if (entryEventAt && Math.abs(eventDate.getTime() - entryEventAt.getTime()) < 90 * 1000) {
+        await markTelegramAttendanceEventProcessed(snap, 'processed', {
+          processedAt: FieldValue.serverTimestamp(),
+          notificationEventKey,
+          skippedReason: 'exit_too_close_to_entry',
+        });
+        await logTelegramEvent({
+          type: 'events.skip.exitTooCloseToEntry',
+          eventId: event.params?.eventId,
+          classroomId: event.params?.classroomId,
+          studentId,
+          notificationEventKey,
+        });
+        return;
+      }
+    }
+
     if ((student as any)?.lastTelegramNotifiedEventKeys?.[notificationEventKey] == true) {
       await logTelegramEvent({
         type: 'events.skip.alreadyNotified',
