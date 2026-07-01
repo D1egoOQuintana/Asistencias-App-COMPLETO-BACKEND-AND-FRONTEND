@@ -33,6 +33,13 @@ class AppDesignSystem {
   static const Color infoColor = Color(0xFF1565C0); // Blue 800
   static const Color infoLight = Color(0xFF42A5F5); // Blue 400
 
+  // ── Semántica de ASISTENCIA (usar SIEMPRE estos, nunca azul crudo) ────────
+  // presente = verde, tardanza = ámbar, ausente = rojo. Alias explícitos para
+  // que las pantallas no reinventen colores por estado.
+  static const Color attendancePresent = successColor; // verde
+  static const Color attendanceLate = warningColor; // ámbar
+  static const Color attendanceAbsent = errorColor; // rojo
+
   // Colores de superficie
   static const Color surfaceColor = Color(0xFFFFFFFF);
   static const Color backgroundLight = Color(0xFFF5F7FA);
@@ -145,6 +152,19 @@ class AppDesignSystem {
     fontWeight: FontWeight.bold,
     color: textPrimary,
   );
+
+  /// Número grande de KPI/métrica. UN solo estilo para todos los "números
+  /// héroe" (ej. 93%, 26). Casi-negro por defecto; el color se pasa solo
+  /// cuando el número ES un estado (verde/ámbar/rojo), no por decoración.
+  static TextStyle metricLarge(BuildContext context, {Color? color}) =>
+      TextStyle(
+        fontFamily: fontFamily,
+        fontSize: getFontSize(context, 30),
+        fontWeight: FontWeight.w800,
+        height: 1.05,
+        letterSpacing: -0.5,
+        color: color ?? textPrimary,
+      );
 
   static TextStyle headlineMedium(BuildContext context) => TextStyle(
     fontFamily: fontFamily,
@@ -291,6 +311,9 @@ class AppDesignSystem {
   }
 
   /// Construir gradiente de fondo
+  @Deprecated(
+      'Fase 0 lenguaje docente: evitar gradientes decorativos. Usar superficie '
+      'plana (surfaceColor / backgroundLight). Se conserva por compatibilidad.')
   static LinearGradient getBackgroundGradient() {
     return const LinearGradient(
       begin: Alignment.topLeft,
@@ -300,6 +323,9 @@ class AppDesignSystem {
   }
 
   /// Construir gradiente de card
+  @Deprecated(
+      'Fase 0 lenguaje docente: las cards son planas (borde 1px + sombra sutil). '
+      'No usar gradiente de card. Se conserva por compatibilidad.')
   static LinearGradient getCardGradient(Color color) {
     return LinearGradient(
       begin: Alignment.topLeft,
