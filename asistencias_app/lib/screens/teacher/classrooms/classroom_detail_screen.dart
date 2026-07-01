@@ -23,6 +23,8 @@ class ClassroomDetailScreen extends StatefulWidget {
 }
 
 class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
+  static const Duration _sameQrRescanCooldown = Duration(seconds: 8);
+
   final Map<String, String> _weekDays = const {
     'monday': 'Lunes',
     'tuesday': 'Martes',
@@ -178,14 +180,16 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
               child: MobileScanner(
                 controller: _scannerController,
                 onDetect: (capture) {
+                  if (_isScanning || _isShowingResult) return;
+
                   for (final barcode in capture.barcodes) {
                     final raw = barcode.rawValue;
                     if (raw == null || raw.isEmpty) continue;
 
                     final now = DateTime.now();
                     if (_lastScanAt != null && _lastScanRaw == raw) {
-                      final diff = now.difference(_lastScanAt!).inMilliseconds;
-                      if (diff < 1200) {
+                      final diff = now.difference(_lastScanAt!);
+                      if (diff < _sameQrRescanCooldown) {
                         return;
                       }
                     }
@@ -1056,7 +1060,7 @@ class _ClassroomDetailScreenState extends State<ClassroomDetailScreen> {
 
   // Procesar QR en sitio y registrar en 'attendance'
   Future<void> _processQRCode(String qrData) async {
-    if (_isScanning) return;
+    if (_isScanning || _isShowingResult) return;
     setState(() => _isScanning = true);
     String studentName = 'Estudiante';
     StudentModel? scannedStudent;

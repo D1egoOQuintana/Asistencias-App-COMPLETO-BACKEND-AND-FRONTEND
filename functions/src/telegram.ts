@@ -6,7 +6,7 @@
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import axios from 'axios';
 
 // Usar la instancia de Firebase Admin ya inicializada
@@ -144,6 +144,69 @@ function getAttendanceDate(attendanceData: any): Date {
   const dateStr = attendanceData?.date || attendanceData?.fecha || undefined;
   const raw = entryAt || fechaHora || (dateStr ? new Date(dateStr) : new Date());
   return new Date(raw);
+}
+
+function timestampToDate(value: any): Date | null {
+  if (!value) return null;
+  if (typeof value?.toDate === 'function') return value.toDate();
+  if (value?._seconds || value?.seconds) {
+    const seconds = value._seconds ?? value.seconds;
+    const nanos = value._nanoseconds ?? value.nanoseconds ?? 0;
+    return new Date(seconds * 1000 + Math.floor(nanos / 1_000_000));
+  }
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function claimTelegramAttendanceEvent(
+  eventSnap: QueryDocumentSnapshot,
+  eventType: 'entry' | 'exit',
+  dayKey: string,
+): Promise<boolean> {
+  const claimTtlMs = 10 * 60 * 1000;
+
+  return db.runTransaction(async (tx) => {
+    const freshSnap = await tx.get(eventSnap.ref);
+    if (!freshSnap.exists) return false;
+
+    const current = freshSnap.data()?.telegramNotification || {};
+    const status = String(current.status || '').toLowerCase();
+    if (status === 'sent' || status === 'processed' || status === 'skipped') {
+      return false;
+    }
+
+    if (status === 'sending') {
+      const claimedAt = timestampToDate(current.claimedAt);
+      if (claimedAt && Date.now() - claimedAt.getTime() < claimTtlMs) {
+        return false;
+      }
+    }
+
+    tx.set(eventSnap.ref, {
+      telegramNotification: {
+        status: 'sending',
+        eventType,
+        dayKey,
+        claimedAt: FieldValue.serverTimestamp(),
+      },
+    }, { merge: true });
+
+    return true;
+  });
+}
+
+async function markTelegramAttendanceEventProcessed(
+  eventSnap: QueryDocumentSnapshot,
+  status: 'processed' | 'error',
+  extra: Record<string, unknown> = {},
+) {
+  await eventSnap.ref.set({
+    telegramNotification: {
+      status,
+      ...extra,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+  }, { merge: true });
 }
 
 function getStudentDisplayName(student: any): string {
@@ -519,6 +582,18 @@ async function processAttendanceEventNotification(event: any) {
       return;
     }
 
+    const claimed = await claimTelegramAttendanceEvent(snap, eventType, dayKey);
+    if (!claimed) {
+      await logTelegramEvent({
+        type: 'events.skip.alreadyClaimed',
+        eventId: event.params?.eventId,
+        classroomId: event.params?.classroomId,
+        studentId,
+        notificationEventKey,
+      });
+      return;
+    }
+
     if (!student?.parentTelegramChatId) {
       if (eventType == 'entry') {
         await sendActivationCode(
@@ -558,6 +633,11 @@ async function processAttendanceEventNotification(event: any) {
       },
     }, { merge: true });
 
+    await markTelegramAttendanceEventProcessed(snap, 'processed', {
+      processedAt: FieldValue.serverTimestamp(),
+      notificationEventKey,
+    });
+
     await logTelegramEvent({
       type: 'events.notified',
       eventId: event.params?.eventId,
@@ -568,6 +648,12 @@ async function processAttendanceEventNotification(event: any) {
     });
   } catch (error) {
     console.error('Error enviando notificación por attendance_events:', telegramErrorSummary(error));
+    if (event.data?.exists) {
+      await markTelegramAttendanceEventProcessed(event.data, 'error', {
+        errorAt: FieldValue.serverTimestamp(),
+        error: telegramErrorSummary(error),
+      });
+    }
     await logTelegramEvent({
       type: 'events.error',
       eventId: event.params?.eventId,
@@ -662,7 +748,7 @@ async function sendActivationCode(student: any, attendanceData: any) {
 
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
-⏰ *Hora:* ${timeStr}
+⏰ *Hora de registro:* ${timeStr}
 
 🔔 *Para recibir notificaciones futuras automáticamente, responda con este código:*
 
@@ -778,7 +864,7 @@ async function sendRegularNotification(
 👨‍🎓 *Estudiante:* ${studentName}
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
-⏰ *Hora:* ${timeStr}
+⏰ *Hora de registro:* ${timeStr}
 
 ${isExit ? '✅ Su hijo(a) ha registrado salida exitosamente.' : '✅ Su hijo(a) ha registrado asistencia exitosamente.'}`;
     
