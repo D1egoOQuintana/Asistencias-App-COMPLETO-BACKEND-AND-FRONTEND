@@ -218,6 +218,14 @@ function getStudentDisplayName(student: any): string {
   return 'Estudiante';
 }
 
+function getAttendanceStatusLabel(attendanceData: any): string {
+  const status = String(attendanceData?.status || attendanceData?.estado || '').trim().toLowerCase();
+  if (status === 'late' || status === 'tarde' || status === 'tardanza') {
+    return 'Tardanza';
+  }
+  return 'Presente';
+}
+
 function getParentPhone(student: any): string {
   return (
     student?.parentPhone ||
@@ -767,12 +775,13 @@ async function sendActivationCode(student: any, attendanceData: any) {
       }
     }
     
-  const { dateStr, timeStr } = formatAttendanceDateTime(attendanceData);
+  const { dateStr } = formatAttendanceDateTime(attendanceData);
+  const statusLabel = getAttendanceStatusLabel(attendanceData);
   const activationMessage = `🎓 *¡${studentName} registró asistencia!*
 
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
-⏰ *Hora de registro:* ${timeStr}
+✅ *Estado:* ${statusLabel}
 
 🔔 *Para recibir notificaciones futuras automáticamente, responda con este código:*
 
@@ -883,14 +892,18 @@ async function sendRegularNotification(
     
   const { dateStr, timeStr } = formatAttendanceDateTime(attendanceData);
   const isExit = eventType === 'exit';
+  const statusLabel = getAttendanceStatusLabel(attendanceData);
+  const eventDetailLine = isExit
+    ? `⏰ *Hora de salida:* ${timeStr}`
+    : `✅ *Estado:* ${statusLabel}`;
   const message = `${isExit ? '🏁 *Salida Registrada*' : '🎓 *Asistencia Registrada*'}
 
 👨‍🎓 *Estudiante:* ${studentName}
 📚 *Clase:* ${classroomName}
 📅 *Fecha:* ${dateStr}
-⏰ *Hora de registro:* ${timeStr}
+${eventDetailLine}
 
-${isExit ? '✅ Su hijo(a) ha registrado salida exitosamente.' : '✅ Su hijo(a) ha registrado asistencia exitosamente.'}`;
+${isExit ? '✅ Su hijo(a) ha registrado salida exitosamente.' : `✅ Su hijo(a) fue registrado como ${statusLabel.toLowerCase()}.`}`;
     
     await axios.post(telegramApiUrl('sendMessage'), {
       chat_id: student.parentTelegramChatId,
